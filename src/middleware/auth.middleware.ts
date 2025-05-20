@@ -37,7 +37,7 @@ export const authorize = (...roles: string[]) => {
         throw new UnauthorizedError('User not authenticated');
       }
 
-      if (!roles.includes(req.user.role as string)) {
+      if (!roles.includes(req.user.role)) {
         throw new ForbiddenError('Insufficient permissions');
       }
 
