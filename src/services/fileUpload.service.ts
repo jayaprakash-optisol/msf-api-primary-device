@@ -88,6 +88,30 @@ export class FileUploadService implements IFileUploadService {
     }
   }
 
+  private validateXlsxFormat(rows: ExcelRow[]): void {
+    const hasParcel = rows.some(r => r[0]?.toString().startsWith('Parcel No:'));
+    const hasOurRef = rows.some(r => r[0]?.toString().startsWith('Our Ref.:'));
+    const hasPack = rows.some(r => r[0]?.toString().startsWith('PACKING LIST'));
+    if (!hasParcel || !hasOurRef || !hasPack) {
+      throw new FileUploadError(
+        'Invalid XLSX format: expected Parcel No, Our Ref.: and PACKING LIST headers',
+      );
+    }
+    // Check item header row
+    const hdrRow = rows.find(
+      r =>
+        Array.isArray(r) &&
+        r.includes('Code') &&
+        r.includes('Description') &&
+        r.includes('Total Qty.'),
+    );
+    if (!hdrRow) {
+      throw new FileUploadError(
+        'Invalid XLSX format: missing item columns Code, Description, Total Qty.',
+      );
+    }
+  }
+
   private async processXLSX(fileContent: Buffer): Promise<DbPayload[]> {
     const wb = XLSX.read(fileContent, { type: 'buffer', cellDates: true });
     const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -98,6 +122,8 @@ export class FileUploadService implements IFileUploadService {
       dateNF: 'yyyy-mm-dd',
       blankrows: false,
     });
+
+    this.validateXlsxFormat(rows);
 
     const starts = this.findParcelStarts(rows);
 
