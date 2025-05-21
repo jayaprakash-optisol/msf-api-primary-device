@@ -66,6 +66,35 @@ export class FileUploadService implements IFileUploadService {
   }
 
   /**
+   * Process an uploaded file and return the parsed data
+   * @param file - The uploaded file
+   * @returns An array of DbPayload objects containing parcel and parcelItem data
+   * @throws FileUploadError if the file format is invalid or the file type is unsupported
+   */
+  async processFile(file: Express.Multer.File): Promise<DbPayload[]> {
+    try {
+      const fileContent = await fs.readFile(file.path);
+
+      // For now, only XLSX processing is implemented
+      if (file.mimetype.includes('spreadsheetml')) {
+        return await this._processXLSX(fileContent);
+      }
+
+      throw new FileUploadError('Unsupported file type');
+    } catch (error) {
+      if (error instanceof FileUploadError) {
+        throw error;
+      }
+      throw new FileUploadError(
+        `Error processing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    } finally {
+      // Clean up the uploaded file
+      await fs.unlink(file.path).catch(console.error);
+    }
+  }
+
+  /**
    * Process an XLSX file and return the parsed data
    * @param fileContent - The content of the uploaded file
    * @returns An array of DbPayload objects containing parcel and parcelItem data
@@ -304,34 +333,5 @@ export class FileUploadService implements IFileUploadService {
       }
     }
     return type;
-  }
-
-  /**
-   * Process an uploaded file and return the parsed data
-   * @param file - The uploaded file
-   * @returns An array of DbPayload objects containing parcel and parcelItem data
-   * @throws FileUploadError if the file format is invalid or the file type is unsupported
-   */
-  async processFile(file: Express.Multer.File): Promise<DbPayload[]> {
-    try {
-      const fileContent = await fs.readFile(file.path);
-
-      // For now, only XLSX processing is implemented
-      if (file.mimetype.includes('spreadsheetml')) {
-        return await this._processXLSX(fileContent);
-      }
-
-      throw new FileUploadError('Unsupported file type');
-    } catch (error) {
-      if (error instanceof FileUploadError) {
-        throw error;
-      }
-      throw new FileUploadError(
-        `Error processing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    } finally {
-      // Clean up the uploaded file
-      await fs.unlink(file.path).catch(console.error);
-    }
   }
 }
