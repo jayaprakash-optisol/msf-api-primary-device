@@ -65,30 +65,56 @@ export class FileUploadService implements IFileUploadService {
     return FileUploadService.instance;
   }
 
-  async processFile(file: Express.Multer.File): Promise<DbPayload[]> {
-    try {
-      const fileContent = await fs.readFile(file.path);
+  /**
+   * Process an XLSX file and return the parsed data
+   * @param fileContent - The content of the uploaded file
+   * @returns An array of DbPayload objects containing parcel and parcelItem data
+   * @throws FileUploadError if the file format is invalid
+   */
+  private async _processXLSX(fileContent: Buffer): Promise<DbPayload[]> {
+    const wb = XLSX.read(fileContent, { type: 'buffer', cellDates: true });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, {
+      header: 1,
+      raw: false,
+      defval: null,
+      dateNF: 'yyyy-mm-dd',
+      blankrows: false,
+    });
 
-      // For now, only XLSX processing is implemented
-      if (file.mimetype.includes('spreadsheetml')) {
-        return await this.processXLSX(fileContent);
-      }
+    this._validateXlsxFormat(rows);
 
-      throw new FileUploadError('Unsupported file type');
-    } catch (error) {
-      if (error instanceof FileUploadError) {
-        throw error;
-      }
-      throw new FileUploadError(
-        `Error processing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    } finally {
-      // Clean up the uploaded file
-      await fs.unlink(file.path).catch(console.error);
+    const starts = this._findParcelStarts(rows);
+
+    if (starts.length === 0) {
+      return [
+        {
+          parcel: {
+            purchaseOrderNumber: null,
+            parcelFrom: null,
+            parcelTo: null,
+          },
+          parcelItems: [],
+        },
+      ];
     }
+
+    // Process each parcel and create a separate DbPayload for each
+    return starts.map((start, idx) => {
+      const end = idx + 1 < starts.length ? starts[idx + 1] : rows.length;
+      const parcelNo = this._extractParcelNo(rows[start]);
+      const parcel = this._buildParcelHeader(rows, start, end, parcelNo);
+      const parcelItems = this._buildParcelItems(rows, start, end, parcelNo);
+      return { parcel, parcelItems };
+    });
   }
 
-  private validateXlsxFormat(rows: ExcelRow[]): void {
+  /**
+   * Validate the format of an XLSX file
+   * @param rows - The rows of the uploaded file
+   * @throws FileUploadError if the file format is invalid
+   */
+  private _validateXlsxFormat(rows: ExcelRow[]): void {
     const hasParcel = rows.some(r => r[0]?.toString().startsWith('Parcel No:'));
     const hasOurRef = rows.some(r => r[0]?.toString().startsWith('Our Ref.:'));
     const hasPack = rows.some(r => r[0]?.toString().startsWith('PACKING LIST'));
@@ -112,55 +138,35 @@ export class FileUploadService implements IFileUploadService {
     }
   }
 
-  private async processXLSX(fileContent: Buffer): Promise<DbPayload[]> {
-    const wb = XLSX.read(fileContent, { type: 'buffer', cellDates: true });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, {
-      header: 1,
-      raw: false,
-      defval: null,
-      dateNF: 'yyyy-mm-dd',
-      blankrows: false,
-    });
-
-    this.validateXlsxFormat(rows);
-
-    const starts = this.findParcelStarts(rows);
-
-    if (starts.length === 0) {
-      return [
-        {
-          parcel: {
-            purchaseOrderNumber: null,
-            parcelFrom: null,
-            parcelTo: null,
-          },
-          parcelItems: [],
-        },
-      ];
-    }
-
-    // Process each parcel and create a separate DbPayload for each
-    return starts.map((start, idx) => {
-      const end = idx + 1 < starts.length ? starts[idx + 1] : rows.length;
-      const parcelNo = this.extractParcelNo(rows[start]);
-      const parcel = this.buildParcelHeader(rows, start, end, parcelNo);
-      const parcelItems = this.buildParcelItems(rows, start, end, parcelNo);
-      return { parcel, parcelItems };
-    });
-  }
-
-  private findParcelStarts(rows: ExcelRow[]): number[] {
+  /**
+   * Find the starting indices of parcels in the uploaded file
+   * @param rows - The rows of the uploaded file
+   * @returns An array of indices where parcel headers start
+   */
+  private _findParcelStarts(rows: ExcelRow[]): number[] {
     return rows.map((row, i) => (row[0]?.startsWith('Parcel No:') ? i : -1)).filter(i => i >= 0);
   }
 
-  private extractParcelNo(row: ExcelRow): string | null {
+  /**
+   * Extract the parcel number from a row
+   * @param row - The row to extract the parcel number from
+   * @returns The parcel number or null if not found
+   */
+  private _extractParcelNo(row: ExcelRow): string | null {
     const raw = row[0] ?? '';
     const parts = raw.split(':');
     return parts[1]?.trim() || null;
   }
 
-  private buildParcelHeader(
+  /**
+   * Build the parcel header from the uploaded file
+   * @param rows - The rows of the uploaded file
+   * @param start - The starting index of the parcel
+   * @param end - The ending index of the parcel
+   * @param parcelNo - The parcel number
+   * @returns A Parcel object containing the parcel header data
+   */
+  private _buildParcelHeader(
     rows: ExcelRow[],
     start: number,
     end: number,
@@ -206,7 +212,7 @@ export class FileUploadService implements IFileUploadService {
     }
 
     // item type
-    const itemType = this.detectItemType(rows, start, end);
+    const itemType = this._detectItemType(rows, start, end);
 
     return {
       purchaseOrderNumber: poNum,
@@ -218,7 +224,15 @@ export class FileUploadService implements IFileUploadService {
     };
   }
 
-  private buildParcelItems(
+  /**
+   * Build the parcel items from the uploaded file
+   * @param rows - The rows of the uploaded file
+   * @param start - The starting index of the parcel
+   * @param end - The ending index of the parcel
+   * @param parcelNo - The parcel number
+   * @returns An array of ParcelItem objects containing the parcel item data
+   */
+  private _buildParcelItems(
     rows: ExcelRow[],
     start: number,
     end: number,
@@ -263,7 +277,14 @@ export class FileUploadService implements IFileUploadService {
     return items;
   }
 
-  private detectItemType(rows: ExcelRow[], start: number, end: number): Parcel['itemType'] {
+  /**
+   * Detect the item type of a parcel
+   * @param rows - The rows of the uploaded file
+   * @param start - The starting index of the parcel
+   * @param end - The ending index of the parcel
+   * @returns The item type of the parcel
+   */
+  private _detectItemType(rows: ExcelRow[], start: number, end: number): Parcel['itemType'] {
     const toStr = (v: string | null): string | null => v?.trim()?.toLowerCase() ?? null;
 
     let type: Parcel['itemType'] = 'regular';
@@ -283,5 +304,34 @@ export class FileUploadService implements IFileUploadService {
       }
     }
     return type;
+  }
+
+  /**
+   * Process an uploaded file and return the parsed data
+   * @param file - The uploaded file
+   * @returns An array of DbPayload objects containing parcel and parcelItem data
+   * @throws FileUploadError if the file format is invalid or the file type is unsupported
+   */
+  async processFile(file: Express.Multer.File): Promise<DbPayload[]> {
+    try {
+      const fileContent = await fs.readFile(file.path);
+
+      // For now, only XLSX processing is implemented
+      if (file.mimetype.includes('spreadsheetml')) {
+        return await this._processXLSX(fileContent);
+      }
+
+      throw new FileUploadError('Unsupported file type');
+    } catch (error) {
+      if (error instanceof FileUploadError) {
+        throw error;
+      }
+      throw new FileUploadError(
+        `Error processing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    } finally {
+      // Clean up the uploaded file
+      await fs.unlink(file.path).catch(console.error);
+    }
   }
 }
