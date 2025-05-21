@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import { FileUploadController } from '../controllers/fileUpload.controller';
-import { upload } from '../services/fileUploadService';
+import { upload } from '../services/fileUpload.service';
 
 const router = Router();
 const fileUploadController = new FileUploadController();

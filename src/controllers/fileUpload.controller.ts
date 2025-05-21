@@ -1,6 +1,6 @@
 import { type Request, type Response } from 'express';
 
-import { FileUploadService } from '../services/fileUploadService';
+import { FileUploadService } from '../services/fileUpload.service';
 import { asyncHandler } from '../middleware/async.middleware';
 import { sendSuccess, FileUploadError } from '../utils';
 import { type IFileUploadService } from '../types';

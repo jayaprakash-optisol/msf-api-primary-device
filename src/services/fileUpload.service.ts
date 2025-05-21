@@ -170,7 +170,7 @@ export class FileUploadService implements IFileUploadService {
     let total = 1;
     if (parcelNo) {
       const match = parcelNo.match(/\d+\s+to\s+(\d+)/i);
-      if (match && match[1]) {
+      if (match?.[1]) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num)) {
           total = num;
