@@ -184,6 +184,10 @@ const swaggerDefinition = {
       name: 'Auth',
       description: 'Guest authentication endpoints',
     },
+    {
+      name: 'Files',
+      description: 'File upload and processing endpoints',
+    },
   ],
 };
 

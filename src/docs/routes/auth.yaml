@@ -1,5 +1,5 @@
 paths:
-  /guest/auth/login:
+  /auth/login:
     post:
       tags:
         - Auth
@@ -17,11 +17,11 @@ paths:
               properties:
                 username:
                   type: string
-                  example: john.doe1234
+                  example: Michael.Scofield1
                 password:
                   type: string
                   format: password
-                  example: Password123!
+                  example: GuestPass123!
       responses:
         '200':
           description: Login successful

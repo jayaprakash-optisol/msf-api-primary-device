@@ -1,0 +1,48 @@
+paths:
+  /files/upload:
+    post:
+      tags:
+        - Files
+      summary: Upload and process XML or XLSX file
+      description: Upload a file and convert it to JSON format. Supports XML and XLSX files up to 5MB.
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: XML or XLSX file to upload
+      responses:
+        '200':
+          description: File successfully processed
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Processed file data in JSON format
+                additionalProperties: true
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: 'Only XML and XLSX files are allowed'
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: 'File size exceeds 5MB limit'
+        '500':
+          $ref: '#/components/responses/ServerError'

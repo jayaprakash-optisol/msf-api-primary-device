@@ -134,6 +134,15 @@ export class DatabaseError extends AppError {
 }
 
 /**
+ * File Upload error
+ */
+export class FileUploadError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super(message, StatusCodes.BAD_REQUEST, true, 'FILE_UPLOAD_ERROR', details);
+  }
+}
+
+/**
  * Type guard to check if an error is an AppError
  */
 export const isAppError = (error: unknown): error is AppError => {

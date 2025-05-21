@@ -1,6 +1,6 @@
 export const authResponse = {
   errors: {
-    invalidCredentials: 'Invalid email or password',
+    invalidCredentials: 'Invalid credentials',
     loginFailed: 'Login failed',
     logoutFailed: 'Logout failed',
     sessionExpired: 'Session expired',
