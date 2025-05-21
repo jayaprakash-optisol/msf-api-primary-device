@@ -169,7 +169,8 @@ export class FileUploadService implements IFileUploadService {
     // Extract total number of parcels from parcelNo (e.g., "2 to 2" -> 2)
     let total = 1;
     if (parcelNo) {
-      const match = parcelNo.match(/\d+\s+to\s+(\d+)/i);
+      const regex = /\d+\s+to\s+(\d+)/i;
+      const match = regex.exec(parcelNo);
       if (match?.[1]) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num)) {
@@ -201,8 +202,8 @@ export class FileUploadService implements IFileUploadService {
 
     // weight/volume
     const info = toStr(rows[start][3]);
-    const weight = info?.match(/Total weight\s*([\d.]+)/i)?.[1] || null;
-    const volume = info?.match(/Total volume\s*([\d.]+)/i)?.[1] || null;
+    const weight = info?.match(/Total weight\s*([\d.]+)/i)?.[1] ?? null;
+    const volume = info?.match(/Total volume\s*([\d.]+)/i)?.[1] ?? null;
 
     const hdr = rows[start + 1].map((v: string | null) => toStr(v));
     const idxOf = (label: string) => hdr.findIndex((h: string | null) => h === label);
@@ -237,7 +238,7 @@ export class FileUploadService implements IFileUploadService {
   }
 
   private detectItemType(rows: ExcelRow[], start: number, end: number): Parcel['itemType'] {
-    const toStr = (v: string | null): string | null => v?.trim()?.toLowerCase() || null;
+    const toStr = (v: string | null): string | null => v?.trim()?.toLowerCase() ?? null;
 
     let type: Parcel['itemType'] = 'regular';
     for (let r = start; r < end; r++) {
