@@ -6,6 +6,8 @@ paths:
       summary: Upload and process XML or XLSX file
       description: Upload a file and convert it to JSON format. Supports XML and XLSX files up to 5MB.
       operationId: uploadFile
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -35,6 +37,8 @@ paths:
               example:
                 success: false
                 error: 'Only XML and XLSX files are allowed'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
         '413':
           description: File too large
           content:

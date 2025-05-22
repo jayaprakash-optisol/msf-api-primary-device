@@ -1,7 +1,7 @@
 import multer from 'multer';
 import { Request } from 'express';
 import * as XLSX from 'xlsx';
-import { promises as fs } from 'fs';
+import fs from 'fs';
 import path from 'path';
 
 import { FileUploadError } from '../utils/error.util';
@@ -14,6 +14,12 @@ const ALLOWED_MIMETYPES = [
   'text/xml',
 ];
 
+// Ensure uploads directory exists
+const UPLOAD_DIR = 'uploads/';
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: (
@@ -21,7 +27,11 @@ const storage = multer.diskStorage({
     _file: Express.Multer.File,
     cb: (error: Error | null, destination: string) => void,
   ) => {
-    cb(null, 'uploads/');
+    // Ensure directory exists before storing file
+    if (!fs.existsSync(UPLOAD_DIR)) {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    }
+    cb(null, UPLOAD_DIR);
   },
   filename: (
     _req: Request,
@@ -73,7 +83,7 @@ export class FileUploadService implements IFileUploadService {
    */
   async processFile(file: Express.Multer.File): Promise<DbPayload[]> {
     try {
-      const fileContent = await fs.readFile(file.path);
+      const fileContent = await fs.promises.readFile(file.path);
 
       // For now, only XLSX processing is implemented
       if (file.mimetype.includes('spreadsheetml')) {
@@ -90,7 +100,7 @@ export class FileUploadService implements IFileUploadService {
       );
     } finally {
       // Clean up the uploaded file
-      await fs.unlink(file.path).catch(console.error);
+      await fs.promises.unlink(file.path).catch(console.error);
     }
   }
 

@@ -2,9 +2,9 @@
   "name": "msf-api-primary-device",
   "version": "1.0.0",
   "description": "MSF Backend API",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "node dist/src/index.js",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "lint": "eslint . --ext .ts",

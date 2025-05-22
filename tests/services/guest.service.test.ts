@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { StatusCodes } from 'http-status-codes';
 import { mockGuests } from '../mocks';
 
 // Create mock functions

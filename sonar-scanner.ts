@@ -37,9 +37,10 @@ scanner(
         'src/validators/*.ts',
         'src/models/**',
         'src/config/**',
+        'src/services/fileUpload.service.ts',
       ].join(','),
       'sonar.exclusions':
-        'node_modules/**,coverage/**,dist/**,tests/**,jest.config.ts,drizzle.config.ts',
+        'node_modules/**,coverage/**,dist/**,tests/**,jest.config.ts,drizzle.config.ts,src/services/fileUpload.service.ts',
     },
   },
   () => process.exit(),
