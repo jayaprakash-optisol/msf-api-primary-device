@@ -1,8 +1,8 @@
 import { type Request, type Response } from 'express';
-import { asyncHandler } from '../middleware/async.middleware';
+import { asyncHandler } from '../middleware';
 import { AuthService } from '../services';
 import { type IAuthService } from '../types';
-import { sendSuccess, UnauthorizedError, authResponse } from '../utils';
+import { authResponse, sendSuccess, UnauthorizedError } from '../utils';
 
 export class AuthController {
   private readonly authService: IAuthService;

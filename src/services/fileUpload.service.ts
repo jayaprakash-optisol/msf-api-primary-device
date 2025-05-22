@@ -3,6 +3,7 @@ import { Request } from 'express';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 import { FileUploadError } from '../utils';
 import { DbPayload, IFileUploadService, Parcel, ParcelItem, Product } from '../types';
@@ -38,7 +39,7 @@ const storage = multer.diskStorage({
     file: Express.Multer.File,
     cb: (error: Error | null, filename: string) => void,
   ) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   },
 });
@@ -240,7 +241,8 @@ export class FileUploadService implements IFileUploadService {
     // Extract total number of parcels from parcelNo (e.g., "2 to 2" -> 2)
     let total = 1;
     if (parcelNo) {
-      const regex = /\d+\s+to\s+(\d+)/i;
+      // Use a more efficient regex with bounded repetition to prevent ReDoS
+      const regex = /^\d+[ \t]{1,3}to[ \t]{1,3}(\d+)$/i;
       const match = regex.exec(parcelNo);
       if (match?.[1]) {
         const num = parseInt(match[1], 10);

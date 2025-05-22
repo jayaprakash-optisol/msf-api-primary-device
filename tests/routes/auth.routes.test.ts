@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import express, { Application } from 'express';
 import request from 'supertest';
 import authRoutes from '../../src/routes/auth.routes';
@@ -29,7 +29,7 @@ vi.mock('../../src/controllers/auth.controller', () => {
 
 // Mock validators
 vi.mock('../../src/validators', () => ({
-  validateGuestLogin: (req, res, next) => next(),
+  validateGuestLogin: (req: any, res: any, next: () => any) => next(),
 }));
 
 describe('Auth Routes (Integration)', () => {
