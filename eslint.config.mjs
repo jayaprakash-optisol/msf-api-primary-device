@@ -31,6 +31,7 @@ export default tseslint.config(
     rules: {
       // Prettier rules
       'prettier/prettier': 'error',
+      '@typescript-eslint/no-explicit-any': 'off',
       // Allow unused variables that start with _
       '@typescript-eslint/no-unused-vars': [
         'error',
