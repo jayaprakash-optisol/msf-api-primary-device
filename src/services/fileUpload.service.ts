@@ -4,8 +4,8 @@ import * as XLSX from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 
-import { FileUploadError } from '../utils/error.util';
-import { DbPayload, Parcel, ParcelItem, Product, IFileUploadService } from '../types';
+import { FileUploadError } from '../utils';
+import { DbPayload, IFileUploadService, Parcel, ParcelItem, Product } from '../types';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIMETYPES = [

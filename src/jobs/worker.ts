@@ -81,8 +81,8 @@ export class CarrierWorker {
     const now = new Date().toLocaleString();
     const startMessage = `⏱️ [${now}] Processing job ${job.id}`;
     console.log(startMessage, job.data);
-    job.log(startMessage);
-    job.log(`Job data: ${JSON.stringify(job.data)}`);
+    await job.log(startMessage);
+    await job.log(`Job data: ${JSON.stringify(job.data)}`);
 
     try {
       // Update job progress
@@ -100,7 +100,7 @@ export class CarrierWorker {
     } catch (error) {
       const errorMessage = `❌ [${new Date().toLocaleString()}] Error processing carrier sync job: ${error}`;
       console.error(errorMessage);
-      job.log(errorMessage);
+      await job.log(errorMessage);
       throw error;
     }
   }

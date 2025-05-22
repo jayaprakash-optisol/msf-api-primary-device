@@ -77,6 +77,13 @@ export const _ok = <T>(data: T, message = '', code = StatusCodes.OK): ServiceRes
 };
 
 /**
+ * Service error response (backward compatible api)
+ */
+export const _error = <T>(error: string, code = StatusCodes.BAD_REQUEST): ServiceResponse<T> => {
+  return createServiceResponse<T>(false, null, error, code);
+};
+
+/**
  * Utility function to handle errors in services
  * This helper rethrows domain errors and wraps unknown errors in InternalServerError
  *

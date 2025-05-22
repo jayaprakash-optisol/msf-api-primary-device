@@ -26,7 +26,6 @@ const deriveKey = (password: string, salt: Buffer): Buffer => {
 /**
  * Encrypt data using AES-256-GCM
  * @param data The data to encrypt
- * @param password The password to use for encryption
  * @returns The encrypted data as a string
  */
 export const encrypt = (data: string): string => {
@@ -63,7 +62,6 @@ export const encrypt = (data: string): string => {
 /**
  * Decrypt data using AES-256-GCM
  * @param encryptedData The encrypted data as a string
- * @param password The password used for encryption
  * @returns The decrypted data as a string
  */
 export const decrypt = (encryptedData: string): string => {

@@ -177,39 +177,3 @@ export const DB_ERROR_CODES = {
   CHECK_VIOLATION: '23514',
   NOT_NULL_VIOLATION: '23502',
 };
-
-/**
- * Factory functions for creating errors
- */
-export const createError = {
-  badRequest: (message: string, code?: string, details?: unknown) =>
-    new BadRequestError(message, code, details),
-
-  unauthorized: (message = 'Unauthorized', code?: string, details?: unknown) =>
-    new UnauthorizedError(message, code, details),
-
-  forbidden: (message = 'Forbidden', code?: string, details?: unknown) =>
-    new ForbiddenError(message, code, details),
-
-  notFound: (message = 'Resource not found', code?: string, details?: unknown) =>
-    new NotFoundError(message, code, details),
-
-  conflict: (message = 'Resource conflict', code?: string, details?: unknown) =>
-    new ConflictError(message, code, details),
-
-  validation: (message = 'Validation error', code?: string, details?: unknown) =>
-    new ValidationError(message, code, details),
-
-  tooManyRequests: (message = 'Too many requests', code?: string, details?: unknown) =>
-    new TooManyRequestsError(message, code, details),
-
-  internal: (
-    message = 'Internal server error',
-    isOperational = false,
-    code?: string,
-    details?: unknown,
-  ) => new InternalServerError(message, isOperational, code, details),
-
-  serviceUnavailable: (message = 'Service unavailable', code?: string, details?: unknown) =>
-    new ServiceUnavailableError(message, code, details),
-};

@@ -1,12 +1,11 @@
 import {
   Guest,
-  IGuestService,
   type IAuthService,
+  IGuestService,
   type JwtPayload,
   type ServiceResponse,
 } from '../types';
-import { UnauthorizedError, _ok, handleServiceError, authResponse } from '../utils';
-import { jwtUtil } from '../utils/jwt.util';
+import { _ok, authResponse, handleServiceError, jwtUtil, UnauthorizedError } from '../utils';
 
 import { GuestService } from './guest.service';
 

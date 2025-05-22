@@ -29,7 +29,6 @@ export default defineConfig({
         'src/docs/**',
         'src/models/**',
         'src/config/**',
-        'src/services/fileUpload.service.ts',
         'src/middleware/rateLimiter.middleware.ts',
       ],
       thresholds: {
