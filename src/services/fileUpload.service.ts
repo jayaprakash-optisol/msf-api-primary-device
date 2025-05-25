@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { parseStringPromise } from 'xml2js';
 
 import { FileUploadError } from '../utils';
 import { DbPayload, IFileUploadService, Parcel, ParcelItem, Product } from '../types';
@@ -86,9 +87,11 @@ export class FileUploadService implements IFileUploadService {
     try {
       const fileContent = await fs.promises.readFile(file.path);
 
-      // For now, only XLSX processing is implemented
+      // Process based on file type
       if (file.mimetype.includes('spreadsheetml')) {
         return await this._processXLSX(fileContent);
+      } else if (file.mimetype.includes('xml')) {
+        return await this._processXML(fileContent);
       }
 
       throw new FileUploadError('Unsupported file type');
@@ -345,5 +348,199 @@ export class FileUploadService implements IFileUploadService {
       }
     }
     return type;
+  }
+
+  /**
+   * Process an XML file and return the parsed data
+   * @param fileContent - The content of the uploaded file
+   * @returns An array of DbPayload objects containing parcel and parcelItem data
+   * @throws FileUploadError if the file format is invalid
+   */
+  private async _processXML(fileContent: Buffer): Promise<DbPayload[]> {
+    try {
+      // Parse XML to JS object
+      const xmlData = await parseStringPromise(fileContent.toString(), {
+        explicitArray: false,
+        mergeAttrs: true,
+      });
+
+      // Validate XML structure
+      if (!xmlData?.data?.record) {
+        throw new FileUploadError('Invalid XML format: missing required elements');
+      }
+
+      const record = xmlData.data.record;
+
+      // Extract purchase order number
+      const purchaseOrderNumber =
+        record.field.find((f: any) => f.name === 'origin')?._ ||
+        record.field.find((f: any) => f.name === 'origin') ||
+        null;
+
+      // Extract partner name (parcel from)
+      let parcelFrom = null;
+      const partnerField = record.field.find((f: any) => f.name === 'partner_id');
+      if (partnerField && partnerField.field) {
+        // Handle both array and object cases for partnerField.field
+        if (Array.isArray(partnerField.field)) {
+          parcelFrom =
+            partnerField.field.find((f: any) => f.name === 'name')?._ ||
+            partnerField.field.find((f: any) => f.name === 'name') ||
+            null;
+        } else {
+          // Handle case where field is an object
+          parcelFrom = partnerField.field._ || partnerField.field.name || null;
+        }
+      }
+
+      // Extract move lines
+      const moveLines = record.field.find((f: any) => f.name === 'move_lines');
+      if (!moveLines || !moveLines.record) {
+        return [
+          {
+            parcel: {
+              purchaseOrderNumber,
+              parcelFrom,
+              parcelTo: null,
+            },
+            parcelItems: [],
+          },
+        ];
+      }
+
+      // Process each move line (parcel)
+      const moveLineRecord = Array.isArray(moveLines.record)
+        ? moveLines.record
+        : [moveLines.record];
+
+      return moveLineRecord.map((moveRecord: any) => {
+        // Extract parcel information
+        const getFieldValue = (name: string) => {
+          const field = moveRecord.field.find((f: any) => f.name === name);
+          return field ? field._ || field : null;
+        };
+
+        const parcelFrom = getFieldValue('parcel_from');
+        const parcelTo = getFieldValue('parcel_to');
+        const totalNumberOfParcels = getFieldValue('parcel_qty');
+        const weight = getFieldValue('total_weight');
+        const volume = getFieldValue('total_volume');
+        const packingListNumber = getFieldValue('packing_list');
+
+        // Build parcel object
+        const parcel: Parcel = {
+          purchaseOrderNumber,
+          parcelFrom,
+          parcelTo,
+          packingListNumber,
+          totalNumberOfParcels: totalNumberOfParcels ? parseInt(totalNumberOfParcels, 10) : 1,
+          itemType: 'regular', // Default value
+        };
+
+        // Process parcel items
+        const parcelItems: ParcelItem[] = [];
+
+        // Handle nested records (product items)
+        const productRecords = moveRecord.record;
+        if (productRecords) {
+          const records = Array.isArray(productRecords) ? productRecords : [productRecords];
+
+          records.forEach((productRecord: any) => {
+            // Skip if not a product record
+            if (!productRecord.field) return;
+
+            const getProductFieldValue = (name: string) => {
+              const field = productRecord.field.find((f: any) => f.name === name);
+              return field ? field._ || field : null;
+            };
+
+            // Extract product information
+            let productCode = null;
+            let productDescription = null;
+
+            const productField = productRecord.field.find((f: any) => f.name === 'product_id');
+            if (productField && productField.field) {
+              if (Array.isArray(productField.field)) {
+                productCode =
+                  productField.field.find((f: any) => f.name === 'product_code')?._ ||
+                  productField.field.find((f: any) => f.name === 'product_code') ||
+                  null;
+                productDescription =
+                  productField.field.find((f: any) => f.name === 'product_name')?._ ||
+                  productField.field.find((f: any) => f.name === 'product_name') ||
+                  null;
+              } else if (Array.isArray(productField.field.field)) {
+                // Handle nested field array
+                productCode =
+                  productField.field.field.find((f: any) => f.name === 'product_code')?._ ||
+                  productField.field.field.find((f: any) => f.name === 'product_code') ||
+                  null;
+                productDescription =
+                  productField.field.field.find((f: any) => f.name === 'product_name')?._ ||
+                  productField.field.field.find((f: any) => f.name === 'product_name') ||
+                  null;
+              } else {
+                // Handle case where field is an object
+                productCode = productField.field.product_code || null;
+                productDescription = productField.field.product_name || null;
+              }
+            }
+
+            // Skip if no product code
+            if (!productCode) return;
+
+            // Extract quantity and unit
+            const quantity = getProductFieldValue('product_qty');
+            let unit = null;
+
+            const uomField = productRecord.field.find((f: any) => f.name === 'product_uom');
+            if (uomField && uomField.field) {
+              if (Array.isArray(uomField.field)) {
+                unit =
+                  uomField.field.find((f: any) => f.name === 'name')?._ ||
+                  uomField.field.find((f: any) => f.name === 'name') ||
+                  null;
+              } else {
+                // Handle case where field is an object
+                unit = uomField.field._ || uomField.field.name || null;
+              }
+            }
+
+            // Format quantity with unit
+            const productQuantity = quantity && unit ? `${quantity} ${unit}` : quantity;
+
+            // Extract batch number and expiry date
+            const batchNumber = getProductFieldValue('prodlot_id');
+            const expiryDate = getProductFieldValue('expired_date');
+
+            // Create product object
+            const product: Product = {
+              productCode,
+              productDescription,
+            };
+
+            // Create parcel item
+            parcelItems.push({
+              parcelNo: `${parcelFrom} to ${parcelTo}`,
+              productQuantity,
+              batchNumber,
+              expiryDate,
+              weight,
+              volume,
+              product,
+            });
+          });
+        }
+
+        return { parcel, parcelItems };
+      });
+    } catch (error) {
+      if (error instanceof FileUploadError) {
+        throw error;
+      }
+      throw new FileUploadError(
+        `Error processing XML file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
   }
 }

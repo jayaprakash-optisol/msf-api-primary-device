@@ -13,6 +13,19 @@ export const mockFile = {
   buffer: Buffer.from('test'),
 } as Express.Multer.File;
 
+// Mock XML file object
+export const mockXmlFile = {
+  fieldname: 'file',
+  originalname: 'test-file.xml',
+  encoding: '7bit',
+  mimetype: 'application/xml',
+  destination: 'uploads/',
+  filename: 'file-123456789.xml',
+  path: 'uploads/file-123456789.xml',
+  size: 12345,
+  buffer: Buffer.from('test'),
+} as Express.Multer.File;
+
 // Mock parcel data
 export const mockParcelData: DbPayload[] = [
   {
