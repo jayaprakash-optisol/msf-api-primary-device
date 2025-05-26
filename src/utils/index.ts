@@ -6,3 +6,5 @@ export * from './error.util';
 export * from './jwt.util';
 export * from './pagination.util';
 export * from './responseMessages';
+export { XMLProcessor } from './xmlProcessor.util';
+export { ExcelProcessor } from './excelProcessor.util';
