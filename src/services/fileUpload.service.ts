@@ -29,7 +29,6 @@ const storage = multer.diskStorage({
     _file: Express.Multer.File,
     cb: (error: Error | null, destination: string) => void,
   ) => {
-    // Ensure directory exists before storing file
     if (!fs.existsSync(UPLOAD_DIR)) {
       fs.mkdirSync(UPLOAD_DIR, { recursive: true });
     }
@@ -77,6 +76,10 @@ export class FileUploadService implements IFileUploadService {
     return FileUploadService.instance;
   }
 
+  // ============================================================================
+  // PUBLIC METHODS
+  // ============================================================================
+
   /**
    * Process an uploaded file and return the parsed data
    * @param file - The uploaded file
@@ -108,11 +111,12 @@ export class FileUploadService implements IFileUploadService {
     }
   }
 
+  // ============================================================================
+  // XLSX PROCESSING METHODS
+  // ============================================================================
+
   /**
    * Process an XLSX file and return the parsed data
-   * @param fileContent - The content of the uploaded file
-   * @returns An array of DbPayload objects containing parcel and parcelItem data
-   * @throws FileUploadError if the file format is invalid
    */
   private async _processXLSX(fileContent: Buffer): Promise<DbPayload[]> {
     const wb = XLSX.read(fileContent, { type: 'buffer', cellDates: true });
@@ -126,7 +130,6 @@ export class FileUploadService implements IFileUploadService {
     });
 
     this._validateXlsxFormat(rows);
-
     const starts = this._findParcelStarts(rows);
 
     if (starts.length === 0) {
@@ -142,7 +145,6 @@ export class FileUploadService implements IFileUploadService {
       ];
     }
 
-    // Process each parcel and create a separate DbPayload for each
     return starts.map((start, idx) => {
       const end = idx + 1 < starts.length ? starts[idx + 1] : rows.length;
       const parcelNo = this._extractParcelNo(rows[start]);
@@ -154,19 +156,18 @@ export class FileUploadService implements IFileUploadService {
 
   /**
    * Validate the format of an XLSX file
-   * @param rows - The rows of the uploaded file
-   * @throws FileUploadError if the file format is invalid
    */
   private _validateXlsxFormat(rows: ExcelRow[]): void {
     const hasParcel = rows.some(r => r[0]?.toString().startsWith('Parcel No:'));
     const hasOurRef = rows.some(r => r[0]?.toString().startsWith('Our Ref.:'));
     const hasPack = rows.some(r => r[0]?.toString().startsWith('PACKING LIST'));
+
     if (!hasParcel || !hasOurRef || !hasPack) {
       throw new FileUploadError(
         'Invalid XLSX format: expected Parcel No, Our Ref.: and PACKING LIST headers',
       );
     }
-    // Check item header row
+
     const hdrRow = rows.find(
       r =>
         Array.isArray(r) &&
@@ -174,6 +175,7 @@ export class FileUploadService implements IFileUploadService {
         r.includes('Description') &&
         r.includes('Total Qty.'),
     );
+
     if (!hdrRow) {
       throw new FileUploadError(
         'Invalid XLSX format: missing item columns Code, Description, Total Qty.',
@@ -183,8 +185,6 @@ export class FileUploadService implements IFileUploadService {
 
   /**
    * Find the starting indices of parcels in the uploaded file
-   * @param rows - The rows of the uploaded file
-   * @returns An array of indices where parcel headers start
    */
   private _findParcelStarts(rows: ExcelRow[]): number[] {
     return rows.map((row, i) => (row[0]?.startsWith('Parcel No:') ? i : -1)).filter(i => i >= 0);
@@ -192,8 +192,6 @@ export class FileUploadService implements IFileUploadService {
 
   /**
    * Extract the parcel number from a row
-   * @param row - The row to extract the parcel number from
-   * @returns The parcel number or null if not found
    */
   private _extractParcelNo(row: ExcelRow): string | null {
     const raw = row[0] ?? '';
@@ -203,11 +201,6 @@ export class FileUploadService implements IFileUploadService {
 
   /**
    * Build the parcel header from the uploaded file
-   * @param rows - The rows of the uploaded file
-   * @param start - The starting index of the parcel
-   * @param end - The ending index of the parcel
-   * @param parcelNo - The parcel number
-   * @returns A Parcel object containing the parcel header data
    */
   private _buildParcelHeader(
     rows: ExcelRow[],
@@ -224,13 +217,15 @@ export class FileUploadService implements IFileUploadService {
       return -1;
     };
 
+    // Extract purchase order number
     const ourRow = findUp('Our Ref.:');
     const poNum = ourRow >= 0 ? toStr(rows[ourRow][2]) : null;
 
+    // Extract packing list number
     const plRow = findUp('PACKING LIST');
     const plNum = plRow >= 0 ? toStr(rows[plRow + 1]?.[0]) : null;
 
-    // Shipper/Dispatch
+    // Extract shipper/dispatch information
     const hdrRow = rows.findIndex(
       (r, i) => i <= start && r.some((c: string | null) => /shipper/i.test(c ?? '')),
     );
@@ -241,10 +236,9 @@ export class FileUploadService implements IFileUploadService {
     const from = shipIdx >= 0 ? toStr(vals[shipIdx]) : null;
     const to = dispIdx >= 0 ? toStr(vals[dispIdx]) : null;
 
-    // Extract total number of parcels from parcelNo (e.g., "2 to 2" -> 2)
+    // Extract total number of parcels
     let total = 1;
     if (parcelNo) {
-      // Use a more efficient regex with bounded repetition to prevent ReDoS
       const regex = /^\d+[ \t]{1,3}to[ \t]{1,3}(\d+)$/i;
       const match = regex.exec(parcelNo);
       if (match?.[1]) {
@@ -255,7 +249,6 @@ export class FileUploadService implements IFileUploadService {
       }
     }
 
-    // item type
     const itemType = this._detectItemType(rows, start, end);
 
     return {
@@ -270,11 +263,6 @@ export class FileUploadService implements IFileUploadService {
 
   /**
    * Build the parcel items from the uploaded file
-   * @param rows - The rows of the uploaded file
-   * @param start - The starting index of the parcel
-   * @param end - The ending index of the parcel
-   * @param parcelNo - The parcel number
-   * @returns An array of ParcelItem objects containing the parcel item data
    */
   private _buildParcelItems(
     rows: ExcelRow[],
@@ -284,7 +272,7 @@ export class FileUploadService implements IFileUploadService {
   ): ParcelItem[] {
     const toStr = (v: string | null): string | null => (v ? v.trim() : null);
 
-    // weight/volume
+    // Extract weight/volume
     const info = toStr(rows[start][3]);
     const weight = info?.match(/Total weight\s*([\d.]+)/i)?.[1] ?? null;
     const volume = info?.match(/Total volume\s*([\d.]+)/i)?.[1] ?? null;
@@ -300,7 +288,7 @@ export class FileUploadService implements IFileUploadService {
       const productCode = toStr(row[idxOf('Code')]);
       const productDescription = toStr(row[idxOf('Description')]);
 
-      // Skip rows without a product code to avoid duplicate empty entries
+      // Skip rows without a product code
       if (!productCode) continue;
 
       const product: Product = {
@@ -323,10 +311,6 @@ export class FileUploadService implements IFileUploadService {
 
   /**
    * Detect the item type of a parcel
-   * @param rows - The rows of the uploaded file
-   * @param start - The starting index of the parcel
-   * @param end - The ending index of the parcel
-   * @returns The item type of the parcel
    */
   private _detectItemType(rows: ExcelRow[], start: number, end: number): Parcel['itemType'] {
     const toStr = (v: string | null): string | null => v?.trim()?.toLowerCase() ?? null;
@@ -350,190 +334,28 @@ export class FileUploadService implements IFileUploadService {
     return type;
   }
 
+  // ============================================================================
+  // XML PROCESSING METHODS
+  // ============================================================================
+
   /**
    * Process an XML file and return the parsed data
-   * @param fileContent - The content of the uploaded file
-   * @returns An array of DbPayload objects containing parcel and parcelItem data
-   * @throws FileUploadError if the file format is invalid
    */
   private async _processXML(fileContent: Buffer): Promise<DbPayload[]> {
     try {
-      // Parse XML to JS object
       const xmlData = await parseStringPromise(fileContent.toString(), {
         explicitArray: false,
         mergeAttrs: true,
       });
 
-      // Validate XML structure
-      if (!xmlData?.data?.record) {
-        throw new FileUploadError('Invalid XML format: missing required elements');
+      const xmlFormat = this._detectXMLFormat(xmlData);
+      this._validateXMLFormat(xmlData, xmlFormat);
+
+      if (xmlFormat === 'standard') {
+        return this._processStandardXML(xmlData);
+      } else {
+        return this._processExcelXML(xmlData);
       }
-
-      const record = xmlData.data.record;
-
-      // Extract purchase order number
-      const purchaseOrderNumber =
-        record.field.find((f: any) => f.name === 'origin')?._ ||
-        record.field.find((f: any) => f.name === 'origin') ||
-        null;
-
-      // Extract partner name (parcel from)
-      let parcelFrom = null;
-      const partnerField = record.field.find((f: any) => f.name === 'partner_id');
-      if (partnerField && partnerField.field) {
-        // Handle both array and object cases for partnerField.field
-        if (Array.isArray(partnerField.field)) {
-          parcelFrom =
-            partnerField.field.find((f: any) => f.name === 'name')?._ ||
-            partnerField.field.find((f: any) => f.name === 'name') ||
-            null;
-        } else {
-          // Handle case where field is an object
-          parcelFrom = partnerField.field._ || partnerField.field.name || null;
-        }
-      }
-
-      // Extract move lines
-      const moveLines = record.field.find((f: any) => f.name === 'move_lines');
-      if (!moveLines || !moveLines.record) {
-        return [
-          {
-            parcel: {
-              purchaseOrderNumber,
-              parcelFrom,
-              parcelTo: null,
-            },
-            parcelItems: [],
-          },
-        ];
-      }
-
-      // Process each move line (parcel)
-      const moveLineRecord = Array.isArray(moveLines.record)
-        ? moveLines.record
-        : [moveLines.record];
-
-      return moveLineRecord.map((moveRecord: any) => {
-        // Extract parcel information
-        const getFieldValue = (name: string) => {
-          const field = moveRecord.field.find((f: any) => f.name === name);
-          return field ? field._ || field : null;
-        };
-
-        const parcelFrom = getFieldValue('parcel_from');
-        const parcelTo = getFieldValue('parcel_to');
-        const totalNumberOfParcels = getFieldValue('parcel_qty');
-        const weight = getFieldValue('total_weight');
-        const volume = getFieldValue('total_volume');
-        const packingListNumber = getFieldValue('packing_list');
-
-        // Build parcel object
-        const parcel: Parcel = {
-          purchaseOrderNumber,
-          parcelFrom,
-          parcelTo,
-          packingListNumber,
-          totalNumberOfParcels: totalNumberOfParcels ? parseInt(totalNumberOfParcels, 10) : 1,
-          itemType: 'regular', // Default value
-        };
-
-        // Process parcel items
-        const parcelItems: ParcelItem[] = [];
-
-        // Handle nested records (product items)
-        const productRecords = moveRecord.record;
-        if (productRecords) {
-          const records = Array.isArray(productRecords) ? productRecords : [productRecords];
-
-          records.forEach((productRecord: any) => {
-            // Skip if not a product record
-            if (!productRecord.field) return;
-
-            const getProductFieldValue = (name: string) => {
-              const field = productRecord.field.find((f: any) => f.name === name);
-              return field ? field._ || field : null;
-            };
-
-            // Extract product information
-            let productCode = null;
-            let productDescription = null;
-
-            const productField = productRecord.field.find((f: any) => f.name === 'product_id');
-            if (productField && productField.field) {
-              if (Array.isArray(productField.field)) {
-                productCode =
-                  productField.field.find((f: any) => f.name === 'product_code')?._ ||
-                  productField.field.find((f: any) => f.name === 'product_code') ||
-                  null;
-                productDescription =
-                  productField.field.find((f: any) => f.name === 'product_name')?._ ||
-                  productField.field.find((f: any) => f.name === 'product_name') ||
-                  null;
-              } else if (Array.isArray(productField.field.field)) {
-                // Handle nested field array
-                productCode =
-                  productField.field.field.find((f: any) => f.name === 'product_code')?._ ||
-                  productField.field.field.find((f: any) => f.name === 'product_code') ||
-                  null;
-                productDescription =
-                  productField.field.field.find((f: any) => f.name === 'product_name')?._ ||
-                  productField.field.field.find((f: any) => f.name === 'product_name') ||
-                  null;
-              } else {
-                // Handle case where field is an object
-                productCode = productField.field.product_code || null;
-                productDescription = productField.field.product_name || null;
-              }
-            }
-
-            // Skip if no product code
-            if (!productCode) return;
-
-            // Extract quantity and unit
-            const quantity = getProductFieldValue('product_qty');
-            let unit = null;
-
-            const uomField = productRecord.field.find((f: any) => f.name === 'product_uom');
-            if (uomField && uomField.field) {
-              if (Array.isArray(uomField.field)) {
-                unit =
-                  uomField.field.find((f: any) => f.name === 'name')?._ ||
-                  uomField.field.find((f: any) => f.name === 'name') ||
-                  null;
-              } else {
-                // Handle case where field is an object
-                unit = uomField.field._ || uomField.field.name || null;
-              }
-            }
-
-            // Format quantity with unit
-            const productQuantity = quantity && unit ? `${quantity} ${unit}` : quantity;
-
-            // Extract batch number and expiry date
-            const batchNumber = getProductFieldValue('prodlot_id');
-            const expiryDate = getProductFieldValue('expired_date');
-
-            // Create product object
-            const product: Product = {
-              productCode,
-              productDescription,
-            };
-
-            // Create parcel item
-            parcelItems.push({
-              parcelNo: `${parcelFrom} to ${parcelTo}`,
-              productQuantity,
-              batchNumber,
-              expiryDate,
-              weight,
-              volume,
-              product,
-            });
-          });
-        }
-
-        return { parcel, parcelItems };
-      });
     } catch (error) {
       if (error instanceof FileUploadError) {
         throw error;
@@ -542,5 +364,476 @@ export class FileUploadService implements IFileUploadService {
         `Error processing XML file: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /**
+   * Detect the XML format type
+   */
+  private _detectXMLFormat(xmlData: any): 'standard' | 'excel' {
+    if (xmlData?.data?.record) {
+      return 'standard';
+    } else if (xmlData?.Workbook || xmlData?.['ss:Workbook']) {
+      return 'excel';
+    }
+    throw new FileUploadError('Unknown XML format: unable to detect format type');
+  }
+
+  /**
+   * Validate XML format and required fields
+   */
+  private _validateXMLFormat(xmlData: any, format: 'standard' | 'excel'): void {
+    if (format === 'standard') {
+      this._validateStandardXML(xmlData);
+    } else {
+      this._validateExcelXML(xmlData);
+    }
+  }
+
+  /**
+   * Validate standard XML format
+   */
+  private _validateStandardXML(xmlData: any): void {
+    if (!xmlData?.data?.record) {
+      throw new FileUploadError('Invalid standard XML format: missing data.record element');
+    }
+
+    const record = xmlData.data.record;
+    if (!record.field || !Array.isArray(record.field)) {
+      throw new FileUploadError('Invalid standard XML format: missing or invalid field array');
+    }
+
+    const requiredFields = ['origin', 'partner_id'];
+    const fieldNames = record.field.map((f: any) => f.name);
+
+    for (const required of requiredFields) {
+      if (!fieldNames.includes(required)) {
+        throw new FileUploadError(`Missing required field in standard XML: ${required}`);
+      }
+    }
+  }
+
+  /**
+   * Validate Excel XML format
+   */
+  private _validateExcelXML(xmlData: any): void {
+    const workbook = xmlData?.Workbook || xmlData?.['ss:Workbook'];
+    if (!workbook) {
+      throw new FileUploadError('Invalid Excel XML format: missing Workbook element');
+    }
+
+    const worksheet = workbook.Worksheet || workbook['ss:Worksheet'];
+    if (!worksheet) {
+      throw new FileUploadError('Invalid Excel XML format: missing Worksheet element');
+    }
+
+    const table = worksheet.Table || worksheet['ss:Table'];
+    if (!table || (!table.Row && !table['ss:Row'])) {
+      throw new FileUploadError('Invalid Excel XML format: missing Table or Row elements');
+    }
+
+    const rows = Array.isArray(table.Row || table['ss:Row'])
+      ? table.Row || table['ss:Row']
+      : [table.Row || table['ss:Row']];
+    if (rows.length < 8) {
+      throw new FileUploadError('Invalid Excel XML format: insufficient rows for required data');
+    }
+  }
+
+  // ============================================================================
+  // STANDARD XML PROCESSING
+  // ============================================================================
+
+  /**
+   * Process standard XML format (UF_cargo format)
+   */
+  private _processStandardXML(xmlData: any): DbPayload[] {
+    const record = xmlData.data.record;
+
+    // Extract purchase order number
+    const purchaseOrderNumber =
+      record.field.find((f: any) => f.name === 'origin')?._ ||
+      record.field.find((f: any) => f.name === 'origin') ||
+      null;
+
+    // Extract partner name (parcel from)
+    let parcelFrom = null;
+    const partnerField = record.field.find((f: any) => f.name === 'partner_id');
+    if (partnerField && partnerField.field) {
+      if (Array.isArray(partnerField.field)) {
+        parcelFrom =
+          partnerField.field.find((f: any) => f.name === 'name')?._ ||
+          partnerField.field.find((f: any) => f.name === 'name') ||
+          null;
+      } else {
+        parcelFrom = partnerField.field._ || partnerField.field.name || null;
+      }
+    }
+
+    // Extract move lines
+    const moveLines = record.field.find((f: any) => f.name === 'move_lines');
+    if (!moveLines || !moveLines.record) {
+      return [
+        {
+          parcel: {
+            purchaseOrderNumber,
+            parcelFrom,
+            parcelTo: null,
+          },
+          parcelItems: [],
+        },
+      ];
+    }
+
+    const moveLineRecord = Array.isArray(moveLines.record) ? moveLines.record : [moveLines.record];
+
+    return moveLineRecord.map((moveRecord: any) => {
+      const getFieldValue = (name: string) => {
+        const field = moveRecord.field.find((f: any) => f.name === name);
+        return field ? field._ || field : null;
+      };
+
+      const parcelFromNum = getFieldValue('parcel_from');
+      const parcelToNum = getFieldValue('parcel_to');
+      const totalNumberOfParcels = getFieldValue('parcel_qty');
+      const weight = getFieldValue('total_weight');
+      const volume = getFieldValue('total_volume');
+      const packingListNumber = getFieldValue('packing_list');
+
+      const parcel: Parcel = {
+        purchaseOrderNumber,
+        parcelFrom: parcelFromNum,
+        parcelTo: parcelToNum,
+        packingListNumber,
+        totalNumberOfParcels: totalNumberOfParcels ? parseInt(totalNumberOfParcels, 10) : 1,
+        itemType: 'regular',
+      };
+
+      const parcelItems = this._processStandardXMLItems(
+        moveRecord,
+        weight,
+        volume,
+        parcelFromNum,
+        parcelToNum,
+      );
+
+      return { parcel, parcelItems };
+    });
+  }
+
+  /**
+   * Process items from standard XML format
+   */
+  private _processStandardXMLItems(
+    moveRecord: any,
+    weight: string | null,
+    volume: string | null,
+    parcelFromNum: string | null,
+    parcelToNum: string | null,
+  ): ParcelItem[] {
+    const parcelItems: ParcelItem[] = [];
+    const productRecords = moveRecord.record;
+
+    if (!productRecords) return parcelItems;
+
+    const records = Array.isArray(productRecords) ? productRecords : [productRecords];
+
+    records.forEach((productRecord: any) => {
+      if (!productRecord.field) return;
+
+      const getProductFieldValue = (name: string) => {
+        const field = productRecord.field.find((f: any) => f.name === name);
+        return field ? field._ || field : null;
+      };
+
+      // Extract product information
+      const { productCode, productDescription } = this._extractProductInfo(productRecord);
+      if (!productCode) return;
+
+      // Extract quantity and unit
+      const quantity = getProductFieldValue('product_qty');
+      const unit = this._extractUnitOfMeasure(productRecord);
+      const productQuantity = quantity && unit ? `${quantity} ${unit}` : quantity;
+
+      // Extract batch and expiry
+      const batchNumber = getProductFieldValue('prodlot_id');
+      const expiryDate = getProductFieldValue('expired_date');
+
+      const product: Product = {
+        productCode,
+        productDescription,
+      };
+
+      parcelItems.push({
+        parcelNo: `${parcelFromNum} to ${parcelToNum}`,
+        productQuantity,
+        batchNumber,
+        expiryDate,
+        weight,
+        volume,
+        product,
+      });
+    });
+
+    return parcelItems;
+  }
+
+  /**
+   * Extract product information from standard XML
+   */
+  private _extractProductInfo(productRecord: any): {
+    productCode: string | null;
+    productDescription: string | null;
+  } {
+    let productCode = null;
+    let productDescription = null;
+
+    const productField = productRecord.field.find((f: any) => f.name === 'product_id');
+    if (productField && productField.field) {
+      if (Array.isArray(productField.field)) {
+        productCode =
+          productField.field.find((f: any) => f.name === 'product_code')?._ ||
+          productField.field.find((f: any) => f.name === 'product_code') ||
+          null;
+        productDescription =
+          productField.field.find((f: any) => f.name === 'product_name')?._ ||
+          productField.field.find((f: any) => f.name === 'product_name') ||
+          null;
+      } else if (Array.isArray(productField.field.field)) {
+        productCode =
+          productField.field.field.find((f: any) => f.name === 'product_code')?._ ||
+          productField.field.field.find((f: any) => f.name === 'product_code') ||
+          null;
+        productDescription =
+          productField.field.field.find((f: any) => f.name === 'product_name')?._ ||
+          productField.field.field.find((f: any) => f.name === 'product_name') ||
+          null;
+      } else {
+        productCode = productField.field.product_code || null;
+        productDescription = productField.field.product_name || null;
+      }
+    }
+
+    return { productCode, productDescription };
+  }
+
+  /**
+   * Extract unit of measure from standard XML
+   */
+  private _extractUnitOfMeasure(productRecord: any): string | null {
+    const uomField = productRecord.field.find((f: any) => f.name === 'product_uom');
+    if (uomField && uomField.field) {
+      if (Array.isArray(uomField.field)) {
+        return (
+          uomField.field.find((f: any) => f.name === 'name')?._ ||
+          uomField.field.find((f: any) => f.name === 'name') ||
+          null
+        );
+      } else {
+        return uomField.field._ || uomField.field.name || null;
+      }
+    }
+    return null;
+  }
+
+  // ============================================================================
+  // EXCEL XML PROCESSING
+  // ============================================================================
+
+  /**
+   * Process Excel XML format (61320_incoming format)
+   */
+  private _processExcelXML(xmlData: any): DbPayload[] {
+    const workbook = xmlData.Workbook || xmlData['ss:Workbook'];
+    const worksheet = workbook.Worksheet || workbook['ss:Worksheet'];
+    const table = worksheet.Table || worksheet['ss:Table'];
+    const rows = Array.isArray(table.Row || table['ss:Row'])
+      ? table.Row || table['ss:Row']
+      : [table.Row || table['ss:Row']];
+
+    const origin = this._getHeaderValue(rows, 2, 1);
+    return this._processExcelXMLRows(rows, origin);
+  }
+
+  /**
+   * Process rows from Excel XML and build parcels
+   */
+  private _processExcelXMLRows(rows: any[], origin: string | null): DbPayload[] {
+    const result: DbPayload[] = [];
+    let currentParcel: Partial<Parcel> = {};
+    let currentParcelItems: ParcelItem[] = [];
+
+    for (const row of rows) {
+      if (!row || (!row.Cell && !row['ss:Cell'])) continue;
+
+      const cells = Array.isArray(row.Cell || row['ss:Cell'])
+        ? row.Cell || row['ss:Cell']
+        : [row.Cell || row['ss:Cell']];
+
+      const processed = this._processExcelXMLRow(
+        cells,
+        currentParcel,
+        currentParcelItems,
+        origin,
+        result,
+      );
+      currentParcel = processed.currentParcel;
+      currentParcelItems = processed.currentParcelItems;
+    }
+
+    this._addFinalParcel(result, currentParcel, currentParcelItems);
+    return result;
+  }
+
+  /**
+   * Process a single Excel XML row
+   */
+  private _processExcelXMLRow(
+    cells: any[],
+    currentParcel: Partial<Parcel>,
+    currentParcelItems: ParcelItem[],
+    origin: string | null,
+    result: DbPayload[],
+  ): { currentParcel: Partial<Parcel>; currentParcelItems: ParcelItem[] } {
+    const firstCellData = cells[0]?.Data || cells[0]?.['ss:Data'];
+    const firstCell = firstCellData?._ || firstCellData || '';
+
+    if (firstCell === '#') {
+      this._addFinalParcel(result, currentParcel, currentParcelItems);
+      return {
+        currentParcel: this._buildExcelXMLParcel(cells, origin),
+        currentParcelItems: [],
+      };
+    } else if (firstCell && /^\d+$/.test(firstCell)) {
+      const parcelItem = this._buildExcelXMLParcelItem(cells, currentParcel);
+      if (parcelItem) {
+        currentParcelItems.push(parcelItem);
+      }
+    }
+
+    return { currentParcel, currentParcelItems };
+  }
+
+  /**
+   * Add final parcel to result if it exists
+   */
+  private _addFinalParcel(
+    result: DbPayload[],
+    currentParcel: Partial<Parcel>,
+    currentParcelItems: ParcelItem[],
+  ): void {
+    if (currentParcel.purchaseOrderNumber) {
+      result.push({
+        parcel: currentParcel as Parcel,
+        parcelItems: currentParcelItems,
+      });
+    }
+  }
+
+  /**
+   * Get header value from Excel XML rows
+   */
+  private _getHeaderValue(rows: any[], rowIndex: number, cellIndex: number = 1): string | null {
+    const row = rows[rowIndex];
+    if (!row || (!row.Cell && !row['ss:Cell'])) return null;
+    const cells = Array.isArray(row.Cell || row['ss:Cell'])
+      ? row.Cell || row['ss:Cell']
+      : [row.Cell || row['ss:Cell']];
+    const cell = cells[cellIndex];
+    const data = cell?.Data || cell?.['ss:Data'];
+    return this._extractStringValue(data);
+  }
+
+  /**
+   * Build parcel object from Excel XML cells
+   */
+  private _buildExcelXMLParcel(cells: any[], origin: string | null): Partial<Parcel> {
+    const parcelQtyData = cells[1]?.Data || cells[1]?.['ss:Data'];
+    const parcelQty = this._extractStringValue(parcelQtyData) || '1';
+    const parcelFromData = cells[2]?.Data || cells[2]?.['ss:Data'];
+    const parcelFrom = this._extractStringValue(parcelFromData) || '1';
+    const parcelToData = cells[3]?.Data || cells[3]?.['ss:Data'];
+    const parcelTo = this._extractStringValue(parcelToData) || '1';
+    const packingListData = cells[9]?.Data || cells[9]?.['ss:Data'];
+    const packingList = this._extractStringValue(packingListData);
+
+    return {
+      purchaseOrderNumber: origin,
+      parcelFrom: parcelFrom,
+      parcelTo: parcelTo,
+      packingListNumber: packingList,
+      totalNumberOfParcels: parseInt(parcelQty, 10) || 1,
+      itemType: 'regular',
+    };
+  }
+
+  /**
+   * Build parcel item from Excel XML cells
+   */
+  private _buildExcelXMLParcelItem(
+    cells: any[],
+    currentParcel: Partial<Parcel>,
+  ): ParcelItem | null {
+    const productCodeData = cells[2]?.Data || cells[2]?.['ss:Data'];
+    const productCode = this._extractStringValue(productCodeData);
+
+    if (!productCode) return null;
+
+    const productDescriptionData = cells[3]?.Data || cells[3]?.['ss:Data'];
+    const productDescription = this._extractStringValue(productDescriptionData);
+    const quantityData = cells[4]?.Data || cells[4]?.['ss:Data'];
+    const quantity = this._extractStringValue(quantityData);
+    const uomData = cells[5]?.Data || cells[5]?.['ss:Data'];
+    const uom = this._extractStringValue(uomData);
+    const batchData = cells[8]?.Data || cells[8]?.['ss:Data'];
+    const batch = this._extractStringValue(batchData);
+    const expiryDateData = cells[9]?.Data || cells[9]?.['ss:Data'];
+    const expiryDate = this._extractStringValue(expiryDateData);
+
+    const product: Product = {
+      productCode,
+      productDescription,
+    };
+
+    const productQuantity = quantity && uom ? `${quantity} ${uom}` : quantity;
+
+    return {
+      parcelNo: `${currentParcel.parcelFrom} to ${currentParcel.parcelTo}`,
+      productQuantity,
+      batchNumber: batch,
+      expiryDate,
+      weight: null,
+      volume: null,
+      product,
+    };
+  }
+
+  // ============================================================================
+  // UTILITY METHODS
+  // ============================================================================
+
+  /**
+   * Extract string value from XML data, handling both string and object cases
+   */
+  private _extractStringValue(data: any): string | null {
+    if (!data) return null;
+
+    if (typeof data === 'string') {
+      return data.trim() || null;
+    }
+
+    if (typeof data === 'object') {
+      if (data._ !== undefined) {
+        return typeof data._ === 'string' ? data._.trim() || null : null;
+      }
+
+      if (typeof data === 'object' && data !== null) {
+        const keys = Object.keys(data);
+        if (keys.length === 0 || (keys.length === 1 && keys[0].includes('Type'))) {
+          return null;
+        }
+      }
+    }
+
+    return null;
   }
 }

@@ -62,7 +62,7 @@ export class ParcelStorageService implements IParcelStorageService {
       // Convert to string for decimal fields
       totalWeight: items[0]?.weight ?? null,
       totalVolume: items[0]?.volume ?? null,
-      sourceSystem: 'EXCEL_IMPORT',
+      sourceSystem: 'FILE_UPLOAD',
     };
 
     return tx.insert(parcels).values(parcelData).returning({ id: parcels.id });
@@ -112,7 +112,7 @@ export class ParcelStorageService implements IParcelStorageService {
     const productData: ProductInsert = {
       productCode,
       productDescription: product.productDescription,
-      sourceSystem: 'EXCEL_IMPORT',
+      sourceSystem: 'FILE_UPLOAD',
     };
 
     const [newProduct] = await tx
@@ -142,18 +142,21 @@ export class ParcelStorageService implements IParcelStorageService {
     // Get unit of measure
     const unitOfMeasure = item.productQuantity?.split(' ')[1] ?? null;
 
+    // Parse expiry date safely
+    const expiryDate = this._parseExpiryDate(item.expiryDate);
+
     // Create parcel item
     const parcelItemData: ParcelItemInsert = {
       productId,
       parcelId,
       productQuantity: quantity,
       productCode: item.product.productCode ?? '',
-      expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+      expiryDate,
       batchNumber: item.batchNumber,
       weight: item.weight ?? null,
       volume: item.volume ?? null,
       unitOfMeasure,
-      sourceSystem: 'EXCEL_IMPORT',
+      sourceSystem: 'FILE_UPLOAD',
     };
 
     await tx.insert(parcelItems).values(parcelItemData);
@@ -169,5 +172,41 @@ export class ParcelStorageService implements IParcelStorageService {
 
     const quantityMatch = /^([\d.]+)/.exec(quantityStr);
     return quantityMatch?.[1] ? parseFloat(quantityMatch[1]) : null;
+  }
+
+  /**
+   * Parse expiry date string to Date object safely
+   * @param expiryDateStr - The expiry date string or object
+   * @returns The parsed Date object or null if invalid
+   */
+  private _parseExpiryDate(expiryDateStr: string | null | any): Date | null {
+    if (!expiryDateStr) return null;
+
+    // If it's not a string, try to extract string value
+    let dateString: string;
+    if (typeof expiryDateStr === 'string') {
+      dateString = expiryDateStr.trim();
+    } else if (typeof expiryDateStr === 'object' && expiryDateStr._) {
+      dateString = expiryDateStr._.trim();
+    } else {
+      return null;
+    }
+
+    if (!dateString) return null;
+
+    try {
+      const parsedDate = new Date(dateString);
+
+      // Check if the date is valid
+      if (isNaN(parsedDate.getTime())) {
+        console.warn(`Invalid expiry date format: ${dateString}`);
+        return null;
+      }
+
+      return parsedDate;
+    } catch (error) {
+      console.warn(`Error parsing expiry date: ${dateString}`, error);
+      return null;
+    }
   }
 }

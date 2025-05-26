@@ -107,7 +107,7 @@ describe('ParcelStorageService', () => {
           packingListNumber: mockDbPayload.parcel.packingListNumber,
           totalWeight: mockDbPayload.parcelItems[0].weight,
           totalVolume: mockDbPayload.parcelItems[0].volume,
-          sourceSystem: 'EXCEL_IMPORT',
+          sourceSystem: 'FILE_UPLOAD',
         }),
       );
     });
@@ -230,7 +230,7 @@ describe('ParcelStorageService', () => {
       expect(mockTx.insert().values).toHaveBeenCalledWith({
         productCode: 'NEW-CODE',
         productDescription: 'New Product',
-        sourceSystem: 'EXCEL_IMPORT',
+        sourceSystem: 'FILE_UPLOAD',
       });
     });
 
@@ -300,7 +300,7 @@ describe('ParcelStorageService', () => {
           unitOfMeasure: 'PCE',
           weight: mockItem.weight,
           volume: mockItem.volume,
-          sourceSystem: 'EXCEL_IMPORT',
+          sourceSystem: 'FILE_UPLOAD',
         }),
       );
     });

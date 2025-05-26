@@ -5,9 +5,7 @@ import { parcels } from './parcels.schema';
 
 export const parcelItems = pgTable('parcel_items', {
   id: uuid('id').primaryKey().defaultRandom(),
-  productId: uuid('product_id')
-    .notNull()
-    .references(() => products.id),
+  productId: uuid('product_id').references(() => products.id),
 
   parcelId: uuid('parcel_id')
     .references(() => parcels.id)
