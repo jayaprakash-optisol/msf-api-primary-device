@@ -25,6 +25,72 @@ import {
 } from '../utils';
 
 /**
+ * Field mappings for cleaner select queries
+ */
+const TASK_FIELDS = {
+  id: tasks.id,
+  parcelId: tasks.parcelId,
+  status: tasks.status,
+  itemType: tasks.itemType,
+  createdAt: tasks.createdAt,
+  updatedAt: tasks.updatedAt,
+} as const;
+
+const PARCEL_FIELDS = {
+  id: parcels.id,
+  purchaseOrderNumber: parcels.purchaseOrderNumber,
+  parcelFrom: parcels.parcelFrom,
+  parcelTo: parcels.parcelTo,
+  totalWeight: parcels.totalWeight,
+  totalVolume: parcels.totalVolume,
+  totalNumberOfParcels: parcels.totalNumberOfParcels,
+  packingListNumber: parcels.packingListNumber,
+  sourceSystem: parcels.sourceSystem,
+  createdAt: parcels.createdAt,
+  updatedAt: parcels.updatedAt,
+} as const;
+
+const PARCEL_ITEM_FIELDS = {
+  id: parcelItems.id,
+  productId: parcelItems.productId,
+  parcelId: parcelItems.parcelId,
+  productQuantity: parcelItems.productQuantity,
+  productCode: parcelItems.productCode,
+  expiryDate: parcelItems.expiryDate,
+  batchNumber: parcelItems.batchNumber,
+  weight: parcelItems.weight,
+  volume: parcelItems.volume,
+  parcelNumber: parcelItems.parcelNumber,
+  lineNumber: parcelItems.lineNumber,
+  externalRef: parcelItems.externalRef,
+  unitOfMeasure: parcelItems.unitOfMeasure,
+  currencyUnit: parcelItems.currencyUnit,
+  unitPrice: parcelItems.unitPrice,
+  messageEsc1: parcelItems.messageEsc1,
+  messageEsc2: parcelItems.messageEsc2,
+  comments: parcelItems.comments,
+  contains: parcelItems.contains,
+  sourceSystem: parcelItems.sourceSystem,
+  createdAt: parcelItems.createdAt,
+  updatedAt: parcelItems.updatedAt,
+} as const;
+
+const PRODUCT_FIELDS = {
+  id: products.id,
+  unidataId: products.unidataId,
+  productCode: products.productCode,
+  productDescription: products.productDescription,
+  type: products.type,
+  state: products.state,
+  freeCode: products.freeCode,
+  standardizationLevel: products.standardizationLevel,
+  labels: products.labels,
+  sourceSystem: products.sourceSystem,
+  createdAt: products.createdAt,
+  updatedAt: products.updatedAt,
+} as const;
+
+/**
  * Simplified Task Service with only required methods
  */
 export class TaskService implements ITaskService {
@@ -37,6 +103,32 @@ export class TaskService implements ITaskService {
       TaskService.instance = new TaskService();
     }
     return TaskService.instance;
+  }
+
+  /**
+   * Helper method to get total count for pagination
+   */
+  private async _getTotalCount(table: any, whereClause?: any): Promise<number> {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(table)
+      .where(whereClause);
+    return Number(count);
+  }
+
+  /**
+   * Helper method to transform task data to TaskWithRelations
+   */
+  private transformToTaskWithRelations(taskData: any[]): TaskWithRelations[] {
+    return taskData.map(task => ({
+      id: task.id,
+      parcelId: task.parcelId,
+      status: task.status as TaskStatus,
+      itemType: task.itemType,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      parcel: task.parcel as ParcelData | null,
+    }));
   }
 
   /**
@@ -109,59 +201,24 @@ export class TaskService implements ITaskService {
         },
       );
 
-      // Get total count first
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(tasks)
-        .leftJoin(parcels, eq(tasks.parcelId, parcels.id))
-        .where(whereClause);
-
-      const total = Number(count);
-
-      // Get paginated tasks with parcel data
-      const paginatedTasksWithParcels = await db
-        .select({
-          // Task fields
-          id: tasks.id,
-          parcelId: tasks.parcelId,
-          status: tasks.status,
-          itemType: tasks.itemType,
-          createdAt: tasks.createdAt,
-          updatedAt: tasks.updatedAt,
-          // Parcel fields
-          parcel: {
-            id: parcels.id,
-            purchaseOrderNumber: parcels.purchaseOrderNumber,
-            parcelFrom: parcels.parcelFrom,
-            parcelTo: parcels.parcelTo,
-            totalWeight: parcels.totalWeight,
-            totalVolume: parcels.totalVolume,
-            totalNumberOfParcels: parcels.totalNumberOfParcels,
-            packingListNumber: parcels.packingListNumber,
-            sourceSystem: parcels.sourceSystem,
-            createdAt: parcels.createdAt,
-            updatedAt: parcels.updatedAt,
-          },
-        })
-        .from(tasks)
-        .leftJoin(parcels, eq(tasks.parcelId, parcels.id))
-        .where(whereClause)
-        .orderBy(desc(tasks.createdAt))
-        .limit(limit)
-        .offset(offset);
+      // Get total count and paginated data
+      const [total, paginatedTasksWithParcels] = await Promise.all([
+        this._getTotalCount(tasks, whereClause),
+        db
+          .select({
+            ...TASK_FIELDS,
+            parcel: PARCEL_FIELDS,
+          })
+          .from(tasks)
+          .leftJoin(parcels, eq(tasks.parcelId, parcels.id))
+          .where(whereClause)
+          .orderBy(desc(tasks.createdAt))
+          .limit(limit)
+          .offset(offset),
+      ]);
 
       const totalPages = Math.ceil(total / limit);
-
-      // Transform to match TaskWithRelations interface
-      const tasksWithRelations: TaskWithRelations[] = paginatedTasksWithParcels.map(task => ({
-        id: task.id,
-        parcelId: task.parcelId,
-        status: task.status as TaskStatus,
-        itemType: task.itemType,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        parcel: task.parcel as ParcelData | null,
-      }));
+      const tasksWithRelations = this.transformToTaskWithRelations(paginatedTasksWithParcels);
 
       const result: PaginatedResult<TaskWithRelations> = {
         items: tasksWithRelations,
@@ -192,65 +249,25 @@ export class TaskService implements ITaskService {
         (params || {}) as Record<string, unknown>,
       );
 
-      // Get total count first
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(parcelItems)
-        .where(eq(parcelItems.parcelId, parcelId));
+      const whereClause = eq(parcelItems.parcelId, parcelId);
 
-      const total = Number(count);
-
-      // Get paginated parcel items with product data and packing list number
-      const paginatedParcelItems = await db
-        .select({
-          // Parcel item fields
-          id: parcelItems.id,
-          productId: parcelItems.productId,
-          parcelId: parcelItems.parcelId,
-          productQuantity: parcelItems.productQuantity,
-          productCode: parcelItems.productCode,
-          expiryDate: parcelItems.expiryDate,
-          batchNumber: parcelItems.batchNumber,
-          weight: parcelItems.weight,
-          volume: parcelItems.volume,
-          parcelNumber: parcelItems.parcelNumber,
-          lineNumber: parcelItems.lineNumber,
-          externalRef: parcelItems.externalRef,
-          unitOfMeasure: parcelItems.unitOfMeasure,
-          currencyUnit: parcelItems.currencyUnit,
-          unitPrice: parcelItems.unitPrice,
-          messageEsc1: parcelItems.messageEsc1,
-          messageEsc2: parcelItems.messageEsc2,
-          comments: parcelItems.comments,
-          contains: parcelItems.contains,
-          sourceSystem: parcelItems.sourceSystem,
-          createdAt: parcelItems.createdAt,
-          updatedAt: parcelItems.updatedAt,
-          // Product data
-          product: {
-            id: products.id,
-            unidataId: products.unidataId,
-            productCode: products.productCode,
-            productDescription: products.productDescription,
-            type: products.type,
-            state: products.state,
-            freeCode: products.freeCode,
-            standardizationLevel: products.standardizationLevel,
-            labels: products.labels,
-            sourceSystem: products.sourceSystem,
-            createdAt: products.createdAt,
-            updatedAt: products.updatedAt,
-          },
-          // Packing list number from parcel
-          packingListNumber: parcels.packingListNumber,
-        })
-        .from(parcelItems)
-        .leftJoin(products, eq(parcelItems.productId, products.id))
-        .leftJoin(parcels, eq(parcelItems.parcelId, parcels.id))
-        .where(eq(parcelItems.parcelId, parcelId))
-        .orderBy(desc(parcelItems.createdAt))
-        .limit(limit)
-        .offset(offset);
+      // Get total count and paginated data
+      const [total, paginatedParcelItems] = await Promise.all([
+        this._getTotalCount(parcelItems, whereClause),
+        db
+          .select({
+            ...PARCEL_ITEM_FIELDS,
+            product: PRODUCT_FIELDS,
+            packingListNumber: parcels.packingListNumber,
+          })
+          .from(parcelItems)
+          .leftJoin(products, eq(parcelItems.productId, products.id))
+          .leftJoin(parcels, eq(parcelItems.parcelId, parcels.id))
+          .where(whereClause)
+          .orderBy(desc(parcelItems.createdAt))
+          .limit(limit)
+          .offset(offset),
+      ]);
 
       const totalPages = Math.ceil(total / limit);
 

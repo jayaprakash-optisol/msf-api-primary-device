@@ -35,7 +35,7 @@ export const mockParcelData: DbPayload[] = [
       parcelTo: 'OCG_KE1_MOM',
       packingListNumber: 'PPL/02225-11',
       totalNumberOfParcels: 1,
-      itemType: 'regular',
+      itemType: 'Regular',
     },
     parcelItems: [
       {
