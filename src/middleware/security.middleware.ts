@@ -1,7 +1,7 @@
 import { type NextFunction, type Request, type Response } from 'express';
 
 const CSP_POLICY =
-  "default-src 'self'; script-src 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'";
+  "default-src 'self'; script-src 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; frame-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests";
 
 /**
  * CORS configuration middleware
@@ -12,6 +12,15 @@ export const corsOptions = {
     origin: string | undefined,
     callback: (err: Error | null, allow?: boolean) => void,
   ): void => {
+    // In production, you should replace this with a whitelist of allowed domains
+    // For development, we're allowing all origins
+    // Example of a more secure configuration:
+    // const allowedOrigins = ['https://example.com', 'https://www.example.com'];
+    // if (!origin || allowedOrigins.includes(origin)) {
+    //   callback(null, true);
+    // } else {
+    //   callback(new Error('Not allowed by CORS'));
+    // }
     callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
