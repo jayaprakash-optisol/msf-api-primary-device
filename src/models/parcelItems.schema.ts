@@ -6,10 +6,7 @@ import { parcels } from './parcels.schema';
 export const parcelItems = pgTable('parcel_items', {
   id: uuid('id').primaryKey().defaultRandom(),
   productId: uuid('product_id').references(() => products.id),
-
-  parcelId: uuid('parcel_id')
-    .references(() => parcels.id)
-    .notNull(),
+  parcelId: uuid('parcel_id').references(() => parcels.id),
 
   productQuantity: integer('product_quantity'),
   productCode: varchar('product_code'),
@@ -17,6 +14,7 @@ export const parcelItems = pgTable('parcel_items', {
   batchNumber: varchar('batch_number', { length: 50 }),
   weight: decimal('weight', { precision: 9, scale: 3 }),
   volume: decimal('volume', { precision: 9, scale: 3 }),
+  parcelNumber: varchar('parcel_number', { length: 50 }),
 
   lineNumber: integer('line_number'),
   externalRef: varchar('external_ref', { length: 50 }),

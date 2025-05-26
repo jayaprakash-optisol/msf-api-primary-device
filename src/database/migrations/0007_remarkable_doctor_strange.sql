@@ -1,0 +1,1 @@
+ALTER TABLE "parcel_items" ALTER COLUMN "parcel_number" SET DATA TYPE varchar(50);

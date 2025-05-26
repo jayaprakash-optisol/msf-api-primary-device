@@ -1,0 +1,339 @@
+paths:
+  /tasks:
+    post:
+      tags:
+        - Tasks
+      summary: Create a new task
+      description: Creates a new task with the provided data. Status defaults to "Yet to Start" if not provided.
+      operationId: createTask
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
+            examples:
+              basic:
+                summary: Basic task creation
+                value:
+                  parcelId: '550e8400-e29b-41d4-a716-446655440000'
+                  itemType: 'Medical Supplies'
+              with_status:
+                summary: Task with specific status
+                value:
+                  parcelId: '550e8400-e29b-41d4-a716-446655440000'
+                  itemType: 'Electronics'
+                  status: 'In Progress'
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              example:
+                success: true
+                message: 'Task created successfully'
+                data:
+                  id: '123e4567-e89b-12d3-a456-426614174000'
+                  parcelId: '550e8400-e29b-41d4-a716-446655440000'
+                  status: 'Yet to Start'
+                  itemType: 'Medical Supplies'
+                  createdAt: '2024-01-15T10:30:00Z'
+                  updatedAt: '2024-01-15T10:30:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    get:
+      tags:
+        - Tasks
+      summary: Get all tasks with pagination and filtering
+      description: Retrieves a paginated list of tasks with optional filtering by status, item type, search term, and parcel ID.
+      operationId: getAllTasks
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 10
+        - name: status
+          in: query
+          description: Filter by task status
+          required: false
+          schema:
+            $ref: '#/components/schemas/TaskStatus'
+          example: 'Yet to Start'
+        - name: itemType
+          in: query
+          description: Filter by item type
+          required: false
+          schema:
+            type: string
+          example: 'Medical Supplies'
+        - name: search
+          in: query
+          description: Search term to filter tasks by item type
+          required: false
+          schema:
+            type: string
+          example: 'medical'
+        - name: parcelId
+          in: query
+          description: Filter by parcel ID
+          required: false
+          schema:
+            type: string
+            format: uuid
+          example: '550e8400-e29b-41d4-a716-446655440000'
+      responses:
+        '200':
+          description: Tasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+              example:
+                success: true
+                message: 'Tasks retrieved successfully'
+                data:
+                  items:
+                    - id: '123e4567-e89b-12d3-a456-426614174000'
+                      parcelId: '550e8400-e29b-41d4-a716-446655440000'
+                      status: 'Yet to Start'
+                      itemType: 'Medical Supplies'
+                      createdAt: '2024-01-15T10:30:00Z'
+                      updatedAt: '2024-01-15T10:30:00Z'
+                      parcel:
+                        id: '550e8400-e29b-41d4-a716-446655440000'
+                        purchaseOrderNumber: 'PO-2024-001'
+                        parcelFrom: 1001
+                        parcelTo: 2001
+                        totalWeight: '25.5'
+                        totalVolume: '12.3'
+                        totalNumberOfParcels: 1
+                        packingListNumber: 'PL-2024-001'
+                        sourceSystem: 'FILE_UPLOAD'
+                        createdAt: '2024-01-15T09:00:00Z'
+                        updatedAt: '2024-01-15T09:00:00Z'
+                  total: 1
+                  page: 1
+                  limit: 10
+                  totalPages: 1
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tasks/{id}/status:
+    patch:
+      tags:
+        - Tasks
+      summary: Update task status
+      description: Updates the status of a specific task by ID.
+      operationId: updateTaskStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Task ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskStatusUpdate'
+            examples:
+              in_progress:
+                summary: Set task to In Progress
+                value:
+                  status: 'In Progress'
+              completed:
+                summary: Set task to Submitted
+                value:
+                  status: 'Submitted'
+              paused:
+                summary: Pause task
+                value:
+                  status: 'Paused'
+      responses:
+        '200':
+          description: Task status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              example:
+                success: true
+                message: 'Task status updated successfully'
+                data:
+                  id: '123e4567-e89b-12d3-a456-426614174000'
+                  parcelId: '550e8400-e29b-41d4-a716-446655440000'
+                  status: 'In Progress'
+                  itemType: 'Medical Supplies'
+                  createdAt: '2024-01-15T10:30:00Z'
+                  updatedAt: '2024-01-15T11:45:00Z'
+        '400':
+          description: Bad request - Invalid status or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalid_status:
+                  summary: Invalid status value
+                  value:
+                    success: false
+                    error: 'Invalid task status provided'
+                validation_error:
+                  summary: Validation error
+                  value:
+                    success: false
+                    error: 'status: Required field'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: 'Task not found'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /tasks/parcel/{parcelId}/items:
+    get:
+      tags:
+        - Tasks
+      summary: Get parcel items by parcel ID with product data
+      description: Retrieves all parcel items associated with a specific parcel ID, including product data and packing list number from the parcel.
+      operationId: getParcelItems
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: parcelId
+          in: path
+          description: Parcel ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: '550e8400-e29b-41d4-a716-446655440000'
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 10
+      responses:
+        '200':
+          description: Parcel items retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelItemsResponse'
+              example:
+                success: true
+                message: 'Parcel items retrieved successfully'
+                data:
+                  items:
+                    - id: '789e0123-e89b-12d3-a456-426614174000'
+                      productId: '456e7890-e89b-12d3-a456-426614174000'
+                      parcelId: '550e8400-e29b-41d4-a716-446655440000'
+                      productQuantity: 100
+                      productCode: 'MED-001'
+                      expiryDate: '2025-12-31T00:00:00Z'
+                      batchNumber: 'BATCH-2024-001'
+                      weight: '5.5'
+                      volume: '2.1'
+                      parcelNumber: 'PN-2024-001'
+                      lineNumber: 1
+                      externalRef: 'EXT-REF-001'
+                      unitOfMeasure: 'PCE'
+                      currencyUnit: 'USD'
+                      unitPrice: '25.99'
+                      messageEsc1: 'Handle with care'
+                      messageEsc2: 'Temperature sensitive'
+                      comments: 'Medical supplies for emergency use'
+                      contains: 'Syringes and bandages'
+                      sourceSystem: 'FILE_UPLOAD'
+                      createdAt: '2024-01-15T09:00:00Z'
+                      updatedAt: '2024-01-15T09:00:00Z'
+                      product:
+                        id: '456e7890-e89b-12d3-a456-426614174000'
+                        unidataId: 'UNI-001'
+                        productCode: 'MED-001'
+                        productDescription: 'Medical Syringes 10ml'
+                        type: 'Medical Device'
+                        state: 'Active'
+                        freeCode: 'FC-001'
+                        standardizationLevel: 'Level 1'
+                        labels: { 'category': 'medical', 'priority': 'high' }
+                        sourceSystem: 'FILE_UPLOAD'
+                        createdAt: '2024-01-15T08:00:00Z'
+                        updatedAt: '2024-01-15T08:00:00Z'
+                      packingListNumber: 'PL-2024-001'
+                  total: 1
+                  page: 1
+                  limit: 10
+                  totalPages: 1
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Parcel not found or no items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: 'No parcel items found for the specified parcel ID'
+        '500':
+          $ref: '#/components/responses/ServerError'

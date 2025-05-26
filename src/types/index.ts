@@ -6,3 +6,4 @@ export * from './guest.interface';
 export * from './fileUpload.interface';
 export * from './parcelStorage.interface';
 export * from './parcelProcessor.interface';
+export * from './task.interface';

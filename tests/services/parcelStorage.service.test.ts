@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ParcelStorageService } from '../../src/services/parcelStorage.service';
 import { mockParcelData } from '../mocks';
 import { db } from '../../src/config/database.config';
-import { parcels, parcelItems, products } from '../../src/models';
+import { parcels, parcelItems, products, tasks } from '../../src/models';
 
 // Create more detailed mocks specific to this test file
 const mockDbPayload = mockParcelData[0];
@@ -10,6 +10,7 @@ const mockDbPayload = mockParcelData[0];
 // Mock return values
 const mockParcelInsertResult = [{ id: 'mock-parcel-id' }];
 const mockProductInsertResult = [{ id: 'mock-product-id' }];
+const mockTaskInsertResult = [{ id: 'mock-task-id' }];
 const mockExistingProduct = [{ id: 'existing-product-id' }];
 const mockEmptyResult: any[] = [];
 
@@ -20,6 +21,7 @@ const createMockTx = () => {
     returning: vi.fn().mockImplementation(fields => {
       if (fields.id === parcels.id) return mockParcelInsertResult;
       if (fields.id === products.id) return mockProductInsertResult;
+      if (fields.id === tasks.id) return mockTaskInsertResult;
       return mockEmptyResult;
     }),
   };
@@ -33,6 +35,10 @@ const createMockTx = () => {
   const mockTx = {
     insert: vi.fn().mockImplementation(() => insertReturn),
     select: vi.fn().mockImplementation(() => selectReturn),
+    update: vi.fn().mockImplementation(() => ({
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue(undefined),
+    })),
   };
 
   return mockTx;
@@ -518,6 +524,217 @@ describe('ParcelStorageService', () => {
       // @ts-ignore - Accessing private method for testing
       const result = parcelStorageService._parseExpiryDate({ _: '   ' });
       expect(result).toBe(null);
+    });
+  });
+
+  describe('Task Management', () => {
+    describe('_createTask', () => {
+      it('should create a task with default values', async () => {
+        const mockTx = createMockTx();
+
+        // @ts-ignore - Accessing private method for testing
+        await parcelStorageService._createTask(mockTx, 'mock-parcel-id');
+
+        expect(mockTx.insert).toHaveBeenCalledWith(tasks);
+        expect(mockTx.insert().values).toHaveBeenCalledWith({
+          parcelId: 'mock-parcel-id',
+          status: 'Yet to Start',
+          itemType: 'Regular',
+        });
+      });
+
+      it('should create a task with provided itemType', async () => {
+        const mockTx = createMockTx();
+
+        // @ts-ignore - Accessing private method for testing
+        await parcelStorageService._createTask(mockTx, 'mock-parcel-id', 'Special');
+
+        expect(mockTx.insert).toHaveBeenCalledWith(tasks);
+        expect(mockTx.insert().values).toHaveBeenCalledWith({
+          parcelId: 'mock-parcel-id',
+          status: 'Yet to Start',
+          itemType: 'Special',
+        });
+      });
+    });
+
+    describe('updateTaskStatus', () => {
+      it('should update task status successfully', async () => {
+        // Mock db.update chain
+        const mockUpdate = {
+          set: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue(undefined),
+        };
+        vi.spyOn(db, 'update').mockReturnValue(mockUpdate as any);
+
+        const result = await parcelStorageService.updateTaskStatus('mock-task-id', 'In Progress');
+
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual({ taskId: 'mock-task-id' });
+        expect(db.update).toHaveBeenCalledWith(tasks);
+        expect(mockUpdate.set).toHaveBeenCalledWith({
+          status: 'In Progress',
+          updatedAt: expect.any(Date),
+        });
+        expect(mockUpdate.where).toHaveBeenCalled();
+      });
+
+      it('should handle errors when updating task status', async () => {
+        // Mock db.update to throw an error
+        vi.spyOn(db, 'update').mockImplementation(() => {
+          throw new Error('Database error');
+        });
+
+        await expect(
+          parcelStorageService.updateTaskStatus('mock-task-id', 'In Progress'),
+        ).rejects.toThrow('Failed to update task status');
+      });
+    });
+
+    describe('getTasksByParcelId', () => {
+      it('should retrieve tasks by parcel ID successfully', async () => {
+        const mockTasks = [
+          {
+            id: 'task-1',
+            parcelId: 'mock-parcel-id',
+            status: 'Yet to Start',
+            itemType: 'Regular',
+          },
+        ];
+
+        // Mock db.select chain
+        const mockSelect = {
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue(mockTasks),
+        };
+        vi.spyOn(db, 'select').mockReturnValue(mockSelect as any);
+
+        const result = await parcelStorageService.getTasksByParcelId('mock-parcel-id');
+
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual(mockTasks);
+        expect(db.select).toHaveBeenCalled();
+        expect(mockSelect.from).toHaveBeenCalledWith(tasks);
+        expect(mockSelect.where).toHaveBeenCalled();
+      });
+
+      it('should handle errors when retrieving tasks by parcel ID', async () => {
+        // Mock db.select to throw an error
+        vi.spyOn(db, 'select').mockImplementation(() => {
+          throw new Error('Database error');
+        });
+
+        await expect(parcelStorageService.getTasksByParcelId('mock-parcel-id')).rejects.toThrow(
+          'Failed to retrieve tasks',
+        );
+      });
+    });
+
+    describe('getAllTasks', () => {
+      it('should retrieve all tasks without filter', async () => {
+        const mockTasks = [
+          {
+            id: 'task-1',
+            parcelId: 'parcel-1',
+            status: 'Yet to Start',
+            itemType: 'Regular',
+          },
+          {
+            id: 'task-2',
+            parcelId: 'parcel-2',
+            status: 'In Progress',
+            itemType: 'Special',
+          },
+        ];
+
+        // Mock db.select chain
+        const mockSelect = {
+          from: vi.fn().mockResolvedValue(mockTasks),
+        };
+        vi.spyOn(db, 'select').mockReturnValue(mockSelect as any);
+
+        const result = await parcelStorageService.getAllTasks();
+
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual(mockTasks);
+        expect(db.select).toHaveBeenCalled();
+        expect(mockSelect.from).toHaveBeenCalledWith(tasks);
+      });
+
+      it('should retrieve tasks with status filter', async () => {
+        const mockTasks = [
+          {
+            id: 'task-1',
+            parcelId: 'parcel-1',
+            status: 'In Progress',
+            itemType: 'Regular',
+          },
+        ];
+
+        // Mock db.select chain with where
+        const mockSelect = {
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue(mockTasks),
+        };
+        vi.spyOn(db, 'select').mockReturnValue(mockSelect as any);
+
+        const result = await parcelStorageService.getAllTasks('In Progress');
+
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual(mockTasks);
+        expect(db.select).toHaveBeenCalled();
+        expect(mockSelect.from).toHaveBeenCalledWith(tasks);
+        expect(mockSelect.where).toHaveBeenCalled();
+      });
+
+      it('should handle errors when retrieving all tasks', async () => {
+        // Mock db.select to throw an error
+        vi.spyOn(db, 'select').mockImplementation(() => {
+          throw new Error('Database error');
+        });
+
+        await expect(parcelStorageService.getAllTasks()).rejects.toThrow(
+          'Failed to retrieve tasks',
+        );
+      });
+    });
+
+    describe('storeExcelData with task creation', () => {
+      it('should create a task when storing excel data', async () => {
+        // @ts-ignore - Accessing private method for testing
+        const createTaskSpy = vi
+          .spyOn(parcelStorageService as any, '_createTask')
+          .mockResolvedValue(undefined);
+
+        const result = await parcelStorageService.storeExcelData(mockDbPayload);
+
+        expect(result.success).toBe(true);
+        expect(createTaskSpy).toHaveBeenCalledWith(
+          expect.anything(),
+          'mock-parcel-id',
+          mockDbPayload.parcel.itemType,
+        );
+      });
+
+      it('should handle task creation with undefined itemType', async () => {
+        const payloadWithoutItemType = {
+          ...mockDbPayload,
+          parcel: {
+            ...mockDbPayload.parcel,
+            itemType: undefined,
+          },
+        };
+
+        // @ts-ignore - Accessing private method for testing
+        const createTaskSpy = vi
+          .spyOn(parcelStorageService as any, '_createTask')
+          .mockResolvedValue(undefined);
+
+        const result = await parcelStorageService.storeExcelData(payloadWithoutItemType);
+
+        expect(result.success).toBe(true);
+        expect(createTaskSpy).toHaveBeenCalledWith(expect.anything(), 'mock-parcel-id', undefined);
+      });
     });
   });
 });

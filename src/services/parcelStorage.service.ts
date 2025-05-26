@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../config/database.config';
-import { parcels, parcelItems, products } from '../models';
+import { parcels, parcelItems, products, tasks } from '../models';
 import {
   type DbPayload,
   type ServiceResponse,
@@ -8,6 +8,7 @@ import {
   type IParcelStorageService,
   ProductInsert,
   ParcelItemInsert,
+  TaskInsert,
 } from '../types';
 import { _ok, handleServiceError } from '../utils';
 
@@ -39,6 +40,9 @@ export class ParcelStorageService implements IParcelStorageService {
 
         // 2. Process each product and parcel item
         await this._createParcelItems(tx, data.parcelItems, insertedParcel.id);
+
+        // 3. Create a task for the parcel
+        await this._createTask(tx, insertedParcel.id, data.parcel.itemType);
 
         return _ok({ parcelId: insertedParcel.id });
       });
@@ -156,6 +160,7 @@ export class ParcelStorageService implements IParcelStorageService {
       weight: item.weight ?? null,
       volume: item.volume ?? null,
       unitOfMeasure,
+      parcelNumber: item.parcelNo ?? null,
       sourceSystem: 'FILE_UPLOAD',
     };
 
@@ -208,5 +213,21 @@ export class ParcelStorageService implements IParcelStorageService {
       console.warn(`Error parsing expiry date: ${dateString}`, error);
       return null;
     }
+  }
+
+  /**
+   * Create a task record for the parcel
+   * @param tx - The database transaction
+   * @param parcelId - The parcel ID to create a task for
+   * @param itemType - The item type from the parcel data
+   */
+  private async _createTask(tx: any, parcelId: string, itemType?: string): Promise<void> {
+    const taskData: TaskInsert = {
+      parcelId,
+      status: 'Yet to Start', // Default status as specified
+      itemType: itemType || 'Regular', // Use provided itemType or default to 'Regular'
+    };
+
+    await tx.insert(tasks).values(taskData);
   }
 }
