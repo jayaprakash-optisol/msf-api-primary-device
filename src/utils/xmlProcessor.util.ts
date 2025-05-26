@@ -166,7 +166,7 @@ export class XMLProcessor {
         parcelTo: parcelToNum,
         packingListNumber,
         totalNumberOfParcels: totalNumberOfParcels ? parseInt(totalNumberOfParcels, 10) : 1,
-        itemType: 'regular',
+        itemType: 'Regular',
       };
 
       const parcelItems = this.processStandardXMLItems(
@@ -316,7 +316,7 @@ export class XMLProcessor {
    */
   private static processExcelXMLRows(rows: any[], origin: string | null): DbPayload[] {
     const result: DbPayload[] = [];
-    let currentParcel: Partial<Parcel> = {};
+    let currentParcel: Partial<Parcel> & { weight?: string; volume?: string } = {};
     let currentParcelItems: ParcelItem[] = [];
 
     for (const row of rows) {
@@ -346,11 +346,14 @@ export class XMLProcessor {
    */
   private static processExcelXMLRow(
     cells: any[],
-    currentParcel: Partial<Parcel>,
+    currentParcel: Partial<Parcel> & { weight?: string; volume?: string },
     currentParcelItems: ParcelItem[],
     origin: string | null,
     result: DbPayload[],
-  ): { currentParcel: Partial<Parcel>; currentParcelItems: ParcelItem[] } {
+  ): {
+    currentParcel: Partial<Parcel> & { weight?: string; volume?: string };
+    currentParcelItems: ParcelItem[];
+  } {
     const firstCellData = cells[0]?.Data || cells[0]?.['ss:Data'];
     const firstCell = firstCellData?._ || firstCellData || '';
 
@@ -375,12 +378,14 @@ export class XMLProcessor {
    */
   private static addFinalParcel(
     result: DbPayload[],
-    currentParcel: Partial<Parcel>,
+    currentParcel: Partial<Parcel> & { weight?: string; volume?: string },
     currentParcelItems: ParcelItem[],
   ): void {
     if (currentParcel.purchaseOrderNumber) {
+      // Remove weight and volume from parcel before adding to result
+      const { weight: _weight, volume: _volume, ...parcelData } = currentParcel;
       result.push({
-        parcel: currentParcel as Parcel,
+        parcel: parcelData as Parcel,
         parcelItems: currentParcelItems,
       });
     }
@@ -401,19 +406,29 @@ export class XMLProcessor {
       : [row.Cell || row['ss:Cell']];
     const cell = cells[cellIndex];
     const data = cell?.Data || cell?.['ss:Data'];
-    return this.extractStringValue(data);
+    const value = this.extractStringValue(data);
+
+    // Remove trailing colon if present (e.g., "24/MBE/LB107/00010:" -> "24/MBE/LB107/00010")
+    return value?.endsWith(':') ? value.slice(0, -1) : value;
   }
 
   /**
    * Build parcel object from Excel XML cells
    */
-  private static buildExcelXMLParcel(cells: any[], origin: string | null): Partial<Parcel> {
+  private static buildExcelXMLParcel(
+    cells: any[],
+    origin: string | null,
+  ): Partial<Parcel> & { weight?: string; volume?: string } {
     const parcelQtyData = cells[1]?.Data || cells[1]?.['ss:Data'];
     const parcelQty = this.extractStringValue(parcelQtyData) || '1';
     const parcelFromData = cells[2]?.Data || cells[2]?.['ss:Data'];
     const parcelFrom = this.extractStringValue(parcelFromData) || '1';
     const parcelToData = cells[3]?.Data || cells[3]?.['ss:Data'];
     const parcelTo = this.extractStringValue(parcelToData) || '1';
+    const weightData = cells[4]?.Data || cells[4]?.['ss:Data'];
+    const weight = this.extractStringValue(weightData);
+    const volumeData = cells[5]?.Data || cells[5]?.['ss:Data'];
+    const volume = this.extractStringValue(volumeData);
     const packingListData = cells[9]?.Data || cells[9]?.['ss:Data'];
     const packingList = this.extractStringValue(packingListData);
 
@@ -423,7 +438,9 @@ export class XMLProcessor {
       parcelTo: parcelTo,
       packingListNumber: packingList,
       totalNumberOfParcels: parseInt(parcelQty, 10) || 1,
-      itemType: 'regular',
+      itemType: 'Regular',
+      weight: weight || undefined,
+      volume: volume || undefined,
     };
   }
 
@@ -432,7 +449,7 @@ export class XMLProcessor {
    */
   private static buildExcelXMLParcelItem(
     cells: any[],
-    currentParcel: Partial<Parcel>,
+    currentParcel: Partial<Parcel> & { weight?: string; volume?: string },
   ): ParcelItem | null {
     const productCodeData = cells[2]?.Data || cells[2]?.['ss:Data'];
     const productCode = this.extractStringValue(productCodeData);
@@ -462,8 +479,8 @@ export class XMLProcessor {
       productQuantity,
       batchNumber: batch,
       expiryDate,
-      weight: null,
-      volume: null,
+      weight: currentParcel.weight || null,
+      volume: currentParcel.volume || null,
       product,
     };
   }

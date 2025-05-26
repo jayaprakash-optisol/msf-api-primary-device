@@ -419,4 +419,105 @@ describe('ParcelStorageService', () => {
       expect(parcelStorageService._parseQuantity('.5 PCE')).toBe(0.5); // Actually parses correctly with the regex
     });
   });
+
+  describe('_parseExpiryDate', () => {
+    let consoleWarnSpy: any;
+
+    beforeEach(() => {
+      consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should parse valid date string correctly', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate('2023-12-31');
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getFullYear()).toBe(2023);
+      expect(result?.getMonth()).toBe(11); // December is month 11
+      expect(result?.getDate()).toBe(31);
+    });
+
+    it('should parse date from object with underscore property', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate({ _: '2023-06-15' });
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getFullYear()).toBe(2023);
+      expect(result?.getMonth()).toBe(5); // June is month 5
+      expect(result?.getDate()).toBe(15);
+    });
+
+    it('should return null for null input', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate(null);
+      expect(result).toBe(null);
+    });
+
+    it('should return null for empty string', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate('');
+      expect(result).toBe(null);
+    });
+
+    it('should return null for object without underscore property', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate({ value: '2023-12-31' });
+      expect(result).toBe(null);
+    });
+
+    it('should return null and warn for invalid date format', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate('invalid-date');
+      expect(result).toBe(null);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Invalid expiry date format: invalid-date');
+    });
+
+    it('should return null and warn for date that creates invalid Date object', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate('2023-13-45'); // Invalid month and day
+      expect(result).toBe(null);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Invalid expiry date format: 2023-13-45');
+    });
+
+    it('should handle Date constructor throwing an error', () => {
+      // Mock Date constructor to throw an error
+      const originalDate = global.Date;
+      global.Date = vi.fn().mockImplementation(() => {
+        throw new Error('Date constructor error');
+      }) as any;
+
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate('2023-12-31');
+      expect(result).toBe(null);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Error parsing expiry date: 2023-12-31',
+        expect.any(Error),
+      );
+
+      // Restore original Date constructor
+      global.Date = originalDate;
+    });
+
+    it('should handle whitespace in date strings', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate('  2023-12-31  ');
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getFullYear()).toBe(2023);
+    });
+
+    it('should handle whitespace in object underscore property', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate({ _: '  2023-06-15  ' });
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getFullYear()).toBe(2023);
+    });
+
+    it('should return null for object with empty underscore property after trim', () => {
+      // @ts-ignore - Accessing private method for testing
+      const result = parcelStorageService._parseExpiryDate({ _: '   ' });
+      expect(result).toBe(null);
+    });
+  });
 });

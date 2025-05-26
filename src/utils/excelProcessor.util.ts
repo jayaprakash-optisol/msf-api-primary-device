@@ -206,7 +206,7 @@ export class ExcelProcessor {
   private static detectItemType(rows: ExcelRow[], start: number, end: number): Parcel['itemType'] {
     const toStr = (v: string | null): string | null => v?.trim()?.toLowerCase() ?? null;
 
-    let type: Parcel['itemType'] = 'regular';
+    let type: Parcel['itemType'] = 'Regular';
     for (let r = start; r < end; r++) {
       const row = rows[r];
       if (row.some((c: string | null) => /Containing:?/i.test(c ?? ''))) {

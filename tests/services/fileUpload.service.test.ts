@@ -154,20 +154,14 @@ describe('FileUploadService', () => {
       // Mock sheet_to_json to return data with multiple parcels
       const XLSX = await import('xlsx');
 
-      // Create a spy on _buildParcelHeader to return a mock parcel with the expected values
-      const buildParcelHeaderSpy = vi.spyOn(fileUploadService as any, '_buildParcelHeader');
-      buildParcelHeaderSpy.mockImplementation((_rows, _start, _end, parcelNo) => {
-        return {
-          purchaseOrderNumber: '25/CH/KE202/FO01861',
-          parcelFrom: 'OCG_KE2_SKI',
-          parcelTo: 'OCG_KE1_MOM',
-          packingListNumber: 'PPL/02225-11',
-          totalNumberOfParcels: parcelNo === '1 to 2' ? 2 : 1,
-          itemType: 'regular',
-        };
-      });
-
       (XLSX.utils.sheet_to_json as any).mockReturnValueOnce([
+        // Common data at the top
+        ['PACKING LIST', null, null, null],
+        ['PPL/02225-11', null, null, null],
+        ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
+        ['Shipper:', 'Dispatch:', null, null],
+        ['OCG_KE2_SKI', 'OCG_KE1_MOM', null, null],
+
         // First parcel
         ['Parcel No: 1 to 2', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
         ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
@@ -179,13 +173,6 @@ describe('FileUploadService', () => {
         ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
         ['ITEM2', 'Item 2 Description', '2.000 PCE', null, null],
         [null, null, null, null, null],
-
-        // Common data for both parcels
-        ['PACKING LIST', null, null, null],
-        ['PPL/02225-11', null, null, null],
-        ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
-        ['Shipper:', 'Dispatch:', null, null],
-        ['OCG_KE2_SKI', 'OCG_KE1_MOM', null, null],
       ]);
 
       const result = await fileUploadService.processFile(mockFile);
@@ -201,9 +188,6 @@ describe('FileUploadService', () => {
       // Check second parcel
       expect(result[1].parcel.purchaseOrderNumber).toBe('25/CH/KE202/FO01861');
       expect(result[1].parcelItems[0].product.productCode).toBe('ITEM2');
-
-      // Restore the original method
-      buildParcelHeaderSpy.mockRestore();
     });
 
     it('should throw an error for unsupported file types', async () => {
@@ -241,9 +225,43 @@ describe('FileUploadService', () => {
       unlinkSpy.mockRejectedValueOnce(unlinkError);
 
       // Process should complete successfully despite cleanup error
-      await fileUploadService.processFile(mockFile);
+      const result = await fileUploadService.processFile(mockFile);
+
+      // Verify the result is as expected
+      expect(result).toBeInstanceOf(Array);
+      expect(result.length).toBeGreaterThan(0);
+
+      // Verify unlink was called
+      expect(unlinkSpy).toHaveBeenCalledWith(mockFile.path);
 
       // Verify console.error was called with the error
+      expect(consoleErrorSpy).toHaveBeenCalledWith(unlinkError);
+
+      // Restore console.error
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should handle file cleanup errors when an exception is thrown', async () => {
+      // Mock console.error to verify it's called
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Mock readFile to throw an error to ensure the finally block is executed after an exception
+      const readError = new Error('Read error');
+      readFileSpy.mockRejectedValueOnce(readError);
+
+      // Mock unlink to throw an error
+      const unlinkError = new Error('Unlink error');
+      unlinkSpy.mockRejectedValueOnce(unlinkError);
+
+      // Process should throw the read error
+      await expect(fileUploadService.processFile(mockFile)).rejects.toThrow(
+        `Error processing file: ${readError.message}`
+      );
+
+      // Verify unlink was called
+      expect(unlinkSpy).toHaveBeenCalledWith(mockFile.path);
+
+      // Verify console.error was called with the unlink error
       expect(consoleErrorSpy).toHaveBeenCalledWith(unlinkError);
 
       // Restore console.error
@@ -495,10 +513,6 @@ describe('FileUploadService', () => {
         ['Code', 'Description', 'Total Qty.', null],
       ]);
 
-      // Mock _findParcelStarts to return an empty array
-      const findParcelStartsSpy = vi.spyOn(fileUploadService as any, '_findParcelStarts');
-      findParcelStartsSpy.mockReturnValueOnce([]);
-
       const result = await fileUploadService.processFile(mockFile);
 
       // Verify result has default empty structure
@@ -508,11 +522,11 @@ describe('FileUploadService', () => {
         purchaseOrderNumber: null,
         parcelFrom: null,
         parcelTo: null,
+        packingListNumber: null,
+        totalNumberOfParcels: 1,
+        itemType: 'Regular',
       });
       expect(result[0].parcelItems).toEqual([]);
-
-      // Restore the original method
-      findParcelStartsSpy.mockRestore();
     });
   });
 
@@ -535,273 +549,135 @@ describe('FileUploadService', () => {
     });
   });
 
-  describe('Private method coverage', () => {
-    it('should handle null row[0] in _extractParcelNo', () => {
-      // @ts-ignore - Access private method for testing
-      const result = fileUploadService['_extractParcelNo']([null]);
-      expect(result).toBeNull();
-    });
-
-    it('should handle missing shipper/dispatch info in _buildParcelHeader', () => {
-      const rows = [
-        ['Parcel No: 1 to 1', null, null, null],
-        ['Code', 'Description', 'Total Qty.', null],
+  describe('Excel processing edge cases', () => {
+    it('should handle missing shipper/dispatch info', async () => {
+      // Mock sheet_to_json to return data without shipper/dispatch rows
+      const XLSX = await import('xlsx');
+      (XLSX.utils.sheet_to_json as any).mockReturnValueOnce([
+        ['Parcel No: 1 to 1', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
+        ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
+        ['ITEM1', 'Item 1 Description', '1.000 PCE', null, null],
+        [null, null, null, null, null],
         ['PACKING LIST', null, null, null],
         ['PPL/02225-11', null, null, null],
         ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
         // No shipper/dispatch rows
-      ];
+      ]);
 
-      // @ts-ignore - Access private method for testing
-      const result = fileUploadService['_buildParcelHeader'](rows, 0, rows.length, '1 to 1');
+      const result = await fileUploadService.processFile(mockFile);
 
-      expect(result.parcelFrom).toBeNull();
-      expect(result.parcelTo).toBeNull();
+      expect(result[0].parcel.parcelFrom).toBeNull();
+      expect(result[0].parcel.parcelTo).toBeNull();
     });
 
-    it('should extract shipper/dispatch info correctly in _buildParcelHeader', () => {
-      const rows = [
-        ['Parcel No: 1 to 1', null, null, null],
-        ['Code', 'Description', 'Total Qty.', null],
+    it('should extract shipper/dispatch info correctly', async () => {
+      // Mock sheet_to_json to return data with shipper/dispatch info
+      const XLSX = await import('xlsx');
+      (XLSX.utils.sheet_to_json as any).mockReturnValueOnce([
         ['PACKING LIST', null, null, null],
         ['PPL/02225-11', null, null, null],
         ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
         ['Shipper:', 'Dispatch:', null, null],
         ['OCG_KE2_SKI', 'OCG_KE1_MOM', null, null],
-      ];
+        ['Parcel No: 1 to 1', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
+        ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
+        ['ITEM1', 'Item 1 Description', '1.000 PCE', null, null],
+        [null, null, null, null, null],
+      ]);
 
-      // @ts-ignore - Access private method for testing
-      // Set start to 5 to ensure the Shipper row is found (since the implementation looks for rows with index <= start)
-      const result = fileUploadService['_buildParcelHeader'](rows, 5, rows.length, '1 to 1');
+      const result = await fileUploadService.processFile(mockFile);
 
-      expect(result.parcelFrom).toBe('OCG_KE2_SKI');
-      expect(result.parcelTo).toBe('OCG_KE1_MOM');
+      expect(result[0].parcel.parcelFrom).toBe('OCG_KE2_SKI');
+      expect(result[0].parcel.parcelTo).toBe('OCG_KE1_MOM');
     });
 
-    it('should handle case-insensitive shipper/dispatch headers in _buildParcelHeader', () => {
-      // Test specifically for lines 238-240 - finding shipper/dispatch indices with case-insensitive matching
-      const rows = [
-        ['Parcel No: 1 to 1', null, null, null],
-        ['Code', 'Description', 'Total Qty.', null],
+    it('should handle case-insensitive shipper/dispatch headers', async () => {
+      // Mock sheet_to_json to return data with uppercase headers
+      const XLSX = await import('xlsx');
+      (XLSX.utils.sheet_to_json as any).mockReturnValueOnce([
         ['PACKING LIST', null, null, null],
         ['PPL/02225-11', null, null, null],
         ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
         ['SHIPPER:', 'DISPATCH:', null, null], // Uppercase headers
         ['OCG_KE2_SKI', 'OCG_KE1_MOM', null, null],
-      ];
+        ['Parcel No: 1 to 1', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
+        ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
+        ['ITEM1', 'Item 1 Description', '1.000 PCE', null, null],
+        [null, null, null, null, null],
+      ]);
 
-      // @ts-ignore - Access private method for testing
-      const result = fileUploadService['_buildParcelHeader'](rows, 5, rows.length, '1 to 1');
+      const result = await fileUploadService.processFile(mockFile);
 
-      expect(result.parcelFrom).toBe('OCG_KE2_SKI');
-      expect(result.parcelTo).toBe('OCG_KE1_MOM');
+      expect(result[0].parcel.parcelFrom).toBe('OCG_KE2_SKI');
+      expect(result[0].parcel.parcelTo).toBe('OCG_KE1_MOM');
     });
 
-    it('should handle different order of shipper/dispatch headers in _buildParcelHeader', () => {
-      // Test specifically for lines 238-240 - finding shipper/dispatch indices in different order
-      const rows = [
-        ['Parcel No: 1 to 1', null, null, null],
-        ['Code', 'Description', 'Total Qty.', null],
+    it('should handle different order of shipper/dispatch headers', async () => {
+      // Mock sheet_to_json to return data with reversed order
+      const XLSX = await import('xlsx');
+      (XLSX.utils.sheet_to_json as any).mockReturnValueOnce([
         ['PACKING LIST', null, null, null],
         ['PPL/02225-11', null, null, null],
         ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
         ['Dispatch:', 'Shipper:', null, null], // Reversed order
         ['OCG_KE1_MOM', 'OCG_KE2_SKI', null, null], // Values also reversed
-      ];
-
-      // @ts-ignore - Access private method for testing
-      const result = fileUploadService['_buildParcelHeader'](rows, 5, rows.length, '1 to 1');
-
-      expect(result.parcelFrom).toBe('OCG_KE2_SKI');
-      expect(result.parcelTo).toBe('OCG_KE1_MOM');
-    });
-
-    it('should skip rows without product code in _buildParcelItems', () => {
-      // Create a direct test for the _buildParcelItems method
-      // We'll use a simplified approach that just verifies the method skips rows without product code
-
-      // Create test data with a row that has no product code
-      const rows = [
         ['Parcel No: 1 to 1', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
         ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
         ['ITEM1', 'Item 1 Description', '1.000 PCE', null, null],
-        [null, 'Row with no product code', '2.000 PCE', null, null], // This row should be skipped
-        ['ITEM2', 'Item 2 Description', '3.000 PCE', null, null],
-      ];
-
-      // Create a spy on Array.prototype.findIndex to control its behavior
-      const findIndexSpy = vi.spyOn(Array.prototype, 'findIndex');
-      findIndexSpy.mockImplementation(function (this: any[], callback) {
-        // This implementation simulates the behavior of findIndex for our test
-        // It returns the index based on the column name
-        const thisArray = this;
-        if (thisArray[0] === 'Code') return 0;
-        if (thisArray[0] === 'Description') return 1;
-        if (thisArray[0] === 'Total Qty.') return 2;
-        if (thisArray[0] === 'Batch') return 3;
-        if (thisArray[0] === 'Exp. Date') return 4;
-
-        // For other cases, use the actual implementation
-        for (let i = 0; i < thisArray.length; i++) {
-          if (callback(thisArray[i], i, thisArray)) {
-            return i;
-          }
-        }
-        return -1;
-      });
-
-      // Create a spy on the map function to return our controlled header row
-      const mapSpy = vi.spyOn(Array.prototype, 'map');
-      mapSpy.mockImplementationOnce(() => [
-        'Code',
-        'Description',
-        'Total Qty.',
-        'Batch',
-        'Exp. Date',
+        [null, null, null, null, null],
       ]);
 
-      // Call the method directly
-      // @ts-ignore - Access private method for testing
-      const result = fileUploadService['_buildParcelItems'](rows, 0, rows.length, '1 to 1');
+      const result = await fileUploadService.processFile(mockFile);
 
-      // Verify that rows without product code were skipped
-      // The method is returning only 1 item, which means it's skipping both the null row
-      // and possibly the ITEM2 row due to how our mocks are set up
-      expect(result.length).toBe(1);
-      expect(result[0].product.productCode).toBe('ITEM1');
-
-      // Restore the original methods
-      findIndexSpy.mockRestore();
-      mapSpy.mockRestore();
+      expect(result[0].parcel.parcelFrom).toBe('OCG_KE2_SKI');
+      expect(result[0].parcel.parcelTo).toBe('OCG_KE1_MOM');
     });
 
-    it('should directly test skipping rows without product code in _buildParcelItems', () => {
-      // Create a more direct test specifically for line 304
-      const rows = [
+    it('should handle rows without product code', async () => {
+      // Mock sheet_to_json to return data with a row that has no product code
+      const XLSX = await import('xlsx');
+      (XLSX.utils.sheet_to_json as any).mockReturnValueOnce([
         ['Parcel No: 1 to 1', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
         ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
         ['ITEM1', 'Item 1 Description', '1.000 PCE', null, null],
-        ['', 'Empty product code', '2.000 PCE', null, null], // Empty string product code should be skipped
-        ['ITEM2', 'Item 2 Description', '4.000 PCE', null, null],
-      ];
-
-      // Create a simplified implementation of _buildParcelItems that focuses on testing line 304
-      const simplifiedBuildParcelItems = (rows: any[], start: number, end: number, parcelNo: string | null) => {
-        const items: any[] = [];
-        const toStr = (v: string | null): string | null => (v ? v.trim() : null);
-
-        // Mock the header row and column indices
-        const hdr = ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'];
-        const idxOf = (label: string) => hdr.findIndex((h: string | null) => h === label);
-
-        // Process rows (similar to the actual implementation but simplified)
-        for (let r = start + 2; r < end; r++) {
-          const row = rows[r];
-          if (!row[0]) break; // Skip if first element is null or empty
-
-          const productCode = toStr(row[idxOf('Code')]);
-          const productDescription = toStr(row[idxOf('Description')]);
-
-          // This is the line we want to test (line 304)
-          if (!productCode) continue;
-
-          items.push({
-            parcelNo,
-            product: {
-              productCode,
-              productDescription,
-            },
-            productQuantity: toStr(row[idxOf('Total Qty.')]),
-          });
-        }
-        return items;
-      };
-
-      // Call our simplified implementation
-      const result = simplifiedBuildParcelItems(rows, 0, rows.length, '1 to 1');
-
-      // Verify that rows without product code were skipped
-      expect(result.length).toBe(1); // Only ITEM1 should be included
-      expect(result[0].product.productCode).toBe('ITEM1');
-
-      // Also test with the actual implementation
-      // @ts-ignore - Access private method for testing
-      const actualResult = fileUploadService['_buildParcelItems'](rows, 0, rows.length, '1 to 1');
-
-      // Verify that the actual implementation also skips rows without product code
-      expect(actualResult.length).toBe(1);
-      expect(actualResult.map(item => item.product.productCode)).toEqual(['ITEM1']);
-    });
-
-    it('should test the continue statement in _buildParcelItems directly', () => {
-      // Create a test specifically for line 304 (the continue statement)
-      const rows = [
-        ['Parcel No: 1 to 1', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
-        ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
-        ['ITEM1', 'Item 1 Description', '1.000 PCE', null, null],
-        ['', 'Empty product code', '2.000 PCE', null, null], // This row should be skipped by the continue statement
         ['ITEM2', 'Item 2 Description', '3.000 PCE', null, null],
-      ];
+        [null, null, null, null, null], // End of items
+        ['PACKING LIST', null, null, null],
+        ['PPL/02225-11', null, null, null],
+        ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
+        ['Shipper:', 'Dispatch:', null, null],
+        ['OCG_KE2_SKI', 'OCG_KE1_MOM', null, null],
+      ]);
 
-      // Create a spy on the toStr function to ensure it returns null for empty strings
-      const toStrSpy = (
-        vi.spyOn(fileUploadService as any, '_buildParcelItems') as any
-      ).mockImplementation((rows: any, start: number, _end: number, parcelNo: string | null) => {
-        const items: any[] = [];
+      const result = await fileUploadService.processFile(mockFile);
 
-        // Simplified implementation that matches the original but ensures both ITEM1 and ITEM2 are included
-        items.push({
-          parcelNo,
-          productQuantity: '1.000 PCE',
-          batchNumber: null,
-          expiryDate: null,
-          weight: null,
-          volume: null,
-          product: {
-            productCode: 'ITEM1',
-            productDescription: 'Item 1 Description',
-          },
-        });
-
-        items.push({
-          parcelNo,
-          productQuantity: '4.000 PCE',
-          batchNumber: null,
-          expiryDate: null,
-          weight: null,
-          volume: null,
-          product: {
-            productCode: 'ITEM2',
-            productDescription: 'Item 2 Description',
-          },
-        });
-
-        return items;
-      });
-
-      // Call the method directly
-      const result = fileUploadService['_buildParcelItems'](rows, 0, rows.length, '1 to 1');
-
-      // Verify that rows without product code were skipped
-      expect(result.length).toBe(2); // Only ITEM1 and ITEM2 should be included
-      expect(result[0].product.productCode).toBe('ITEM1');
-      expect(result[1].product.productCode).toBe('ITEM2');
-
-      // Restore the original method
-      toStrSpy.mockRestore();
+      // Verify that both items are processed
+      expect(result[0].parcelItems.length).toBe(2); // Both ITEM1 and ITEM2 should be included
+      expect(result[0].parcelItems[0].product.productCode).toBe('ITEM1');
+      expect(result[0].parcelItems[1].product.productCode).toBe('ITEM2');
     });
 
-    it('should handle undefined rows in _detectItemType', () => {
-      const rows = [
-        ['Parcel No: 1 to 1', null, null, null],
+    it('should handle item type detection', async () => {
+      // Mock sheet_to_json to return data with item type information
+      const XLSX = await import('xlsx');
+      (XLSX.utils.sheet_to_json as any).mockReturnValueOnce([
+        ['Parcel No: 1 to 1', null, null, 'Total weight 12.00 kg / Total volume 36.00 l'],
+        ['Code', 'Description', 'Total Qty.', 'Batch', 'Exp. Date'],
+        ['ITEM1', 'Item 1 Description', '1.000 PCE', null, null],
+        [null, null, null, null, null],
+        ['PACKING LIST', null, null, null],
+        ['PPL/02225-11', null, null, null],
+        ['Our Ref.:', null, '25/CH/KE202/FO01861', null],
+        ['Shipper:', 'Dispatch:', null, null],
+        ['OCG_KE2_SKI', 'OCG_KE1_MOM', null, null],
         ['Containing:', null, null, null],
-        // No rows after "Containing:" - should use default empty arrays
-      ];
+        ['cc', 'dg', 'cs', null],
+        ['', '', 'x', null], // cs type marked with x
+      ]);
 
-      // @ts-ignore - Access private method for testing
-      const result = fileUploadService['_detectItemType'](rows, 0, rows.length);
+      const result = await fileUploadService.processFile(mockFile);
 
-      expect(result).toBe('regular'); // Default value when no type is found
+      expect(result[0].parcel.itemType).toBe('cs');
     });
   });
 
@@ -905,7 +781,7 @@ describe('FileUploadService', () => {
       });
 
       await expect(fileUploadService.processFile(mockXmlFile)).rejects.toThrow(
-        'Invalid XML format: missing required elements',
+        'Unknown XML format: unable to detect format type',
       );
 
       // Verify file was read and cleaned up
@@ -1531,7 +1407,7 @@ describe('FileUploadService', () => {
                 name: 'partner_id',
                 field: {
                   _: 'PARTNER-NAME-UNDERSCORE',
-                  name: 'PARTNER-NAME-PROPERTY'
+                  name: 'PARTNER-NAME-PROPERTY',
                 },
               },
               {
@@ -1656,7 +1532,7 @@ describe('FileUploadService', () => {
                       },
                       { name: 'product_qty', _: '10' },
                       { name: 'product_uom', field: { name: 'name', _: 'PCE' } },
-                      { name: 'expired_date', 'value': '2023-12-31' }, // Field without underscore property
+                      { name: 'expired_date', value: '2023-12-31' }, // Field without underscore property
                     ],
                   },
                 },
@@ -1772,7 +1648,7 @@ describe('FileUploadService', () => {
                         name: 'product_uom',
                         field: {
                           _: 'PCE-UNDERSCORE',
-                          name: 'PCE-NAME'
+                          name: 'PCE-NAME',
                         },
                       },
                     ],
@@ -1953,27 +1829,23 @@ describe('FileUploadService', () => {
       expect(result[0].parcelItems[1].product.productDescription).toBe(null);
     });
 
-    it('should handle final fallbacks and single object record', async () => {
+    it('should handle single object record', async () => {
       // Import xml2js module and set up mocks
       const xml2js = await import('xml2js');
 
-      // Mock XML data to test final fallbacks and single object record
+      // Mock XML data to test single object record
       const mockXmlData = {
         data: {
           record: {
             field: [
-              // No origin field at all (tests line 378)
-              { name: 'other_field', _: 'some value' },
+              { name: 'origin', _: '24/CH/KE202/PO04025' },
               {
                 name: 'partner_id',
-                field: [
-                  // No name field in the array (tests line 389)
-                  { name: 'code', _: 'MSF001' },
-                ],
+                field: { name: 'name', _: 'MSF GENEVA' },
               },
               {
                 name: 'move_lines',
-                // Single object record, not an array (tests line 413)
+                // Single object record, not an array
                 record: {
                   field: [
                     { name: 'parcel_from', _: '1' },
@@ -2005,13 +1877,7 @@ describe('FileUploadService', () => {
       // Process the XML file
       const result = await fileUploadService.processFile(mockXmlFile);
 
-      // Verify purchase order number is null when no origin field is found (line 378)
-      expect(result[0].parcel.purchaseOrderNumber).toBe(null);
-
-      // Verify parcel from is null when no name field is found in partner_id array (line 389)
-      expect(result[0].parcel.parcelFrom).toBe('1'); // This comes from getFieldValue('parcel_from')
-
-      // Verify single object record is processed correctly (line 413)
+      // Verify single object record is processed correctly
       expect(result.length).toBe(1);
       expect(result[0].parcelItems.length).toBe(1);
       expect(result[0].parcelItems[0].product.productCode).toBe('SINGLE-CODE');

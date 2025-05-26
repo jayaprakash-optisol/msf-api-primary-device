@@ -8,3 +8,11 @@ export const guestRoleEnum = pgEnum('guest_role', ['Stock Manager', 'Store Keepe
 
 // Guest Status Enum
 export const guestStatusEnum = pgEnum('guest_status', ['Active', 'Inactive', 'Expired']);
+
+// Task Status Enum
+export const taskStatusEnum = pgEnum('task_status', [
+  'Yet to Start',
+  'In Progress',
+  'Paused',
+  'Submitted',
+]);
