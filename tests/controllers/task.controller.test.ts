@@ -16,13 +16,6 @@ import {
   mockParcelItemsServiceResponse,
   mockTaskNotFoundServiceResponse,
   mockTaskCreationFailedServiceResponse,
-  mockInvalidStatusServiceResponse,
-  mockCreateTaskRequest,
-  mockUpdateTaskStatusRequest,
-  mockGetAllTasksRequest,
-  mockGetParcelItemsRequest,
-  mockTaskQueryParams,
-  mockPaginationParams,
   allTaskStatusValues,
   invalidStatusValues,
 } from '../mocks';

@@ -99,57 +99,94 @@ export class ExcelProcessor {
     end: number,
     parcelNo: string | null,
   ): Parcel {
-    const toStr = (v: string | null): string | null => (v ? v.trim() : null);
-
-    const findUp = (label: string): number => {
-      for (let r = start; r >= 0; r--) {
-        if (rows[r][0]?.startsWith(label)) return r;
-      }
-      return -1;
-    };
-
-    // Extract purchase order number
-    const ourRow = findUp('Our Ref.:');
-    const poNum = ourRow >= 0 ? toStr(rows[ourRow][2]) : null;
-
-    // Extract packing list number
-    const plRow = findUp('PACKING LIST');
-    const plNum = plRow >= 0 ? toStr(rows[plRow + 1]?.[0]) : null;
-
-    // Extract shipper/dispatch information
-    const hdrRow = rows.findIndex(
-      (r, i) => i <= start && r.some((c: string | null) => /shipper/i.test(c ?? '')),
-    );
-    const hdr = hdrRow >= 0 ? rows[hdrRow] : [];
-    const vals = rows[hdrRow + 1] ?? [];
-    const shipIdx = hdr.findIndex((c: string | null) => /^shipper:/i.test(c ?? ''));
-    const dispIdx = hdr.findIndex((c: string | null) => /^dispatch:/i.test(c ?? ''));
-    const from = shipIdx >= 0 ? toStr(vals[shipIdx]) : null;
-    const to = dispIdx >= 0 ? toStr(vals[dispIdx]) : null;
-
-    // Extract total number of parcels
-    let total = 1;
-    if (parcelNo) {
-      const regex = /^\d+[ \t]{1,3}to[ \t]{1,3}(\d+)$/i;
-      const match = regex.exec(parcelNo);
-      if (match?.[1]) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num)) {
-          total = num;
-        }
-      }
-    }
-
+    const purchaseOrderNumber = this.extractPurchaseOrderNumber(rows, start);
+    const packingListNumber = this.extractPackingListNumber(rows, start);
+    const { parcelFrom, parcelTo } = this.extractShipperDispatchInfo(rows, start);
+    const totalNumberOfParcels = this.extractTotalParcels(parcelNo);
     const itemType = this.detectItemType(rows, start, end);
 
     return {
-      purchaseOrderNumber: poNum,
-      parcelFrom: from,
-      parcelTo: to,
-      packingListNumber: plNum,
-      totalNumberOfParcels: total,
+      purchaseOrderNumber,
+      parcelFrom,
+      parcelTo,
+      packingListNumber,
+      totalNumberOfParcels,
       itemType,
     };
+  }
+
+  /**
+   * Extract purchase order number from rows
+   */
+  private static extractPurchaseOrderNumber(rows: ExcelRow[], start: number): string | null {
+    const ourRow = this.findRowUp(rows, start, 'Our Ref.:');
+    return ourRow >= 0 ? this.toStr(rows[ourRow][2]) : null;
+  }
+
+  /**
+   * Extract packing list number from rows
+   */
+  private static extractPackingListNumber(rows: ExcelRow[], start: number): string | null {
+    const plRow = this.findRowUp(rows, start, 'PACKING LIST');
+    return plRow >= 0 ? this.toStr(rows[plRow + 1]?.[0]) : null;
+  }
+
+  /**
+   * Extract shipper and dispatch information
+   */
+  private static extractShipperDispatchInfo(
+    rows: ExcelRow[],
+    start: number,
+  ): { parcelFrom: string | null; parcelTo: string | null } {
+    const hdrRow = rows.findIndex(
+      (r, i) => i <= start && r.some((c: string | null) => /shipper/i.test(c ?? '')),
+    );
+
+    if (hdrRow < 0) {
+      return { parcelFrom: null, parcelTo: null };
+    }
+
+    const hdr = rows[hdrRow];
+    const vals = rows[hdrRow + 1] ?? [];
+    const shipIdx = hdr.findIndex((c: string | null) => /^shipper:/i.test(c ?? ''));
+    const dispIdx = hdr.findIndex((c: string | null) => /^dispatch:/i.test(c ?? ''));
+
+    return {
+      parcelFrom: shipIdx >= 0 ? this.toStr(vals[shipIdx]) : null,
+      parcelTo: dispIdx >= 0 ? this.toStr(vals[dispIdx]) : null,
+    };
+  }
+
+  /**
+   * Extract total number of parcels from parcel number
+   */
+  private static extractTotalParcels(parcelNo: string | null): number {
+    if (!parcelNo) return 1;
+
+    const regex = /^\d+[ \t]{1,3}to[ \t]{1,3}(\d+)$/i;
+    const match = regex.exec(parcelNo);
+
+    if (!match?.[1]) return 1;
+
+    const num = parseInt(match[1], 10);
+    return isNaN(num) ? 1 : num;
+  }
+
+  /**
+   * Find a row starting with a label, searching upward from start
+   */
+  private static findRowUp(rows: ExcelRow[], start: number, label: string): number {
+    for (let r = start; r >= 0; r--) {
+      if (rows[r][0]?.startsWith(label)) return r;
+    }
+    return -1;
+  }
+
+  /**
+   * Convert value to trimmed string or null
+   */
+  private static toStr(v: string | null): string | null {
+    return v ? v.trim() : null;
   }
 
   /**
@@ -161,14 +198,12 @@ export class ExcelProcessor {
     end: number,
     parcelNo: string | null,
   ): ParcelItem[] {
-    const toStr = (v: string | null): string | null => (v ? v.trim() : null);
-
     // Extract weight/volume
-    const info = toStr(rows[start][3]);
+    const info = this.toStr(rows[start][3]);
     const weight = info?.match(/Total weight\s*([\d.]+)/i)?.[1] ?? null;
     const volume = info?.match(/Total volume\s*([\d.]+)/i)?.[1] ?? null;
 
-    const hdr = rows[start + 1].map((v: string | null) => toStr(v));
+    const hdr = rows[start + 1].map((v: string | null) => this.toStr(v));
     const idxOf = (label: string) => hdr.findIndex((h: string | null) => h === label);
 
     const items: ParcelItem[] = [];
@@ -176,8 +211,8 @@ export class ExcelProcessor {
       const row = rows[r];
       if (!row[0]) break;
 
-      const productCode = toStr(row[idxOf('Code')]);
-      const productDescription = toStr(row[idxOf('Description')]);
+      const productCode = this.toStr(row[idxOf('Code')]);
+      const productDescription = this.toStr(row[idxOf('Description')]);
 
       // Skip rows without a product code
       if (!productCode) continue;
@@ -189,9 +224,9 @@ export class ExcelProcessor {
 
       items.push({
         parcelNo,
-        productQuantity: toStr(row[idxOf('Total Qty.')]),
-        batchNumber: toStr(row[idxOf('Batch')]),
-        expiryDate: toStr(row[idxOf('Exp. Date')]),
+        productQuantity: this.toStr(row[idxOf('Total Qty.')]),
+        batchNumber: this.toStr(row[idxOf('Batch')]),
+        expiryDate: this.toStr(row[idxOf('Exp. Date')]),
         weight,
         volume,
         product,
@@ -204,8 +239,6 @@ export class ExcelProcessor {
    * Detect the item type of a parcel
    */
   private static detectItemType(rows: ExcelRow[], start: number, end: number): Parcel['itemType'] {
-    const toStr = (v: string | null): string | null => v?.trim()?.toLowerCase() ?? null;
-
     let type: Parcel['itemType'] = 'Regular';
     for (let r = start; r < end; r++) {
       const row = rows[r];
@@ -213,8 +246,8 @@ export class ExcelProcessor {
         const labels = rows[r + 1] ?? [];
         const vals = rows[r + 2] ?? [];
         labels.forEach((cell: string | null, idx: number) => {
-          const lbl = toStr(cell);
-          const val = toStr(vals[idx]);
+          const lbl = cell?.trim()?.toLowerCase() ?? null;
+          const val = vals[idx]?.trim()?.toLowerCase() ?? null;
           if (val === 'x' && lbl && ['cc', 'dg', 'cs'].includes(lbl)) {
             type = lbl as Parcel['itemType'];
           }

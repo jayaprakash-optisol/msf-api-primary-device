@@ -37,58 +37,137 @@ const swaggerDefinition = {
       },
     },
     schemas: {
-      Guest: {
+      // Common field definitions
+      CommonFields: {
         type: 'object',
-        required: ['id', 'username', 'role', 'status'],
         properties: {
           id: {
             type: 'string',
             format: 'uuid',
-            description: 'Guest ID',
-          },
-          firstName: {
-            type: 'string',
-            description: 'Guest first name',
-          },
-          lastName: {
-            type: 'string',
-            description: 'Guest last name',
-          },
-          location: {
-            type: 'string',
-            description: 'Guest location',
-          },
-          role: {
-            type: 'string',
-            description: 'Guest role',
-          },
-          accessPeriod: {
-            type: 'string',
-            description: 'Guest access period',
-          },
-          username: {
-            type: 'string',
-            description: 'Guest username',
-          },
-          status: {
-            type: 'string',
-            description: 'Guest account status',
-          },
-          credentialsViewed: {
-            type: 'boolean',
-            description: 'Whether guest credentials have been viewed',
+            description: 'Unique identifier',
           },
           createdAt: {
             type: 'string',
             format: 'date-time',
-            description: 'Guest creation timestamp',
+            description: 'Creation timestamp',
           },
           updatedAt: {
             type: 'string',
             format: 'date-time',
-            description: 'Guest last update timestamp',
+            description: 'Last update timestamp',
+          },
+          sourceSystem: {
+            type: 'string',
+            description: 'Source system identifier',
+            nullable: true,
           },
         },
+      },
+      PaginationMeta: {
+        type: 'object',
+        required: ['total', 'page', 'limit', 'totalPages'],
+        properties: {
+          total: {
+            type: 'integer',
+            description: 'Total number of items',
+          },
+          page: {
+            type: 'integer',
+            description: 'Current page number',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Number of items per page',
+          },
+          totalPages: {
+            type: 'integer',
+            description: 'Total number of pages',
+          },
+        },
+      },
+      // Reusable field types
+      UuidField: {
+        type: 'string',
+        format: 'uuid',
+      },
+      NullableString: {
+        type: 'string',
+        nullable: true,
+      },
+      NullableInteger: {
+        type: 'integer',
+        nullable: true,
+      },
+      // Base response structure
+      BaseResponse: {
+        type: 'object',
+        required: ['success', 'message'],
+        properties: {
+          success: {
+            type: 'boolean',
+          },
+          message: {
+            type: 'string',
+          },
+        },
+      },
+      // Paginated list response structure
+      PaginatedListResponse: {
+        allOf: [
+          { $ref: '#/components/schemas/PaginationMeta' },
+          {
+            type: 'object',
+            required: ['items'],
+            properties: {
+              items: {
+                type: 'array',
+              },
+            },
+          },
+        ],
+      },
+      Guest: {
+        allOf: [
+          { $ref: '#/components/schemas/CommonFields' },
+          {
+            type: 'object',
+            required: ['username', 'role', 'status'],
+            properties: {
+              firstName: {
+                type: 'string',
+                description: 'Guest first name',
+              },
+              lastName: {
+                type: 'string',
+                description: 'Guest last name',
+              },
+              location: {
+                type: 'string',
+                description: 'Guest location',
+              },
+              role: {
+                type: 'string',
+                description: 'Guest role',
+              },
+              accessPeriod: {
+                type: 'string',
+                description: 'Guest access period',
+              },
+              username: {
+                type: 'string',
+                description: 'Guest username',
+              },
+              status: {
+                type: 'string',
+                description: 'Guest account status',
+              },
+              credentialsViewed: {
+                type: 'boolean',
+                description: 'Whether guest credentials have been viewed',
+              },
+            },
+          },
+        ],
       },
       Error: {
         type: 'object',
@@ -110,39 +189,35 @@ const swaggerDefinition = {
         description: 'Task status enumeration',
       },
       Task: {
-        type: 'object',
-        required: ['id', 'status', 'createdAt', 'updatedAt'],
-        properties: {
-          id: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Task ID',
+        allOf: [
+          { $ref: '#/components/schemas/CommonFields' },
+          {
+            type: 'object',
+            required: ['status'],
+            properties: {
+              parcelId: {
+                allOf: [
+                  { $ref: '#/components/schemas/UuidField' },
+                  {
+                    description: 'Associated parcel ID',
+                    nullable: true,
+                  },
+                ],
+              },
+              status: {
+                $ref: '#/components/schemas/TaskStatus',
+              },
+              itemType: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Type of items in the task',
+                  },
+                ],
+              },
+            },
           },
-          parcelId: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Associated parcel ID',
-            nullable: true,
-          },
-          status: {
-            $ref: '#/components/schemas/TaskStatus',
-          },
-          itemType: {
-            type: 'string',
-            description: 'Type of items in the task',
-            nullable: true,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Task creation timestamp',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Task last update timestamp',
-          },
-        },
+        ],
       },
       TaskWithRelations: {
         allOf: [
@@ -169,9 +244,12 @@ const swaggerDefinition = {
         required: ['parcelId'],
         properties: {
           parcelId: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Associated parcel ID',
+            allOf: [
+              { $ref: '#/components/schemas/UuidField' },
+              {
+                description: 'Associated parcel ID',
+              },
+            ],
           },
           status: {
             $ref: '#/components/schemas/TaskStatus',
@@ -193,242 +271,277 @@ const swaggerDefinition = {
         },
       },
       TaskResponse: {
-        type: 'object',
-        required: ['success', 'message', 'data'],
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          message: {
-            type: 'string',
-            example: 'Task created successfully',
-          },
-          data: {
-            $ref: '#/components/schemas/Task',
-          },
-        },
-      },
-      TaskListResponse: {
-        type: 'object',
-        required: ['success', 'message', 'data'],
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          message: {
-            type: 'string',
-            example: 'Tasks retrieved successfully',
-          },
-          data: {
+        allOf: [
+          { $ref: '#/components/schemas/BaseResponse' },
+          {
             type: 'object',
-            required: ['items', 'total', 'page', 'limit', 'totalPages'],
+            required: ['data'],
             properties: {
-              items: {
-                type: 'array',
-                items: {
-                  $ref: '#/components/schemas/TaskWithRelations',
-                },
+              success: {
+                example: true,
               },
-              total: {
-                type: 'integer',
-                description: 'Total number of tasks',
+              message: {
+                example: 'Task created successfully',
               },
-              page: {
-                type: 'integer',
-                description: 'Current page number',
-              },
-              limit: {
-                type: 'integer',
-                description: 'Number of items per page',
-              },
-              totalPages: {
-                type: 'integer',
-                description: 'Total number of pages',
+              data: {
+                $ref: '#/components/schemas/Task',
               },
             },
           },
-        },
+        ],
+      },
+      TaskListResponse: {
+        allOf: [
+          { $ref: '#/components/schemas/BaseResponse' },
+          {
+            type: 'object',
+            required: ['data'],
+            properties: {
+              success: {
+                example: true,
+              },
+              message: {
+                example: 'Tasks retrieved successfully',
+              },
+              data: {
+                allOf: [
+                  { $ref: '#/components/schemas/PaginatedListResponse' },
+                  {
+                    type: 'object',
+                    properties: {
+                      items: {
+                        type: 'array',
+                        items: {
+                          $ref: '#/components/schemas/TaskWithRelations',
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
       },
       Parcel: {
-        type: 'object',
-        required: ['id', 'createdAt', 'updatedAt'],
-        properties: {
-          id: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Parcel ID',
+        allOf: [
+          { $ref: '#/components/schemas/CommonFields' },
+          {
+            type: 'object',
+            properties: {
+              purchaseOrderNumber: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Purchase order number',
+                  },
+                ],
+              },
+              parcelFrom: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableInteger' },
+                  {
+                    description: 'Source location code',
+                  },
+                ],
+              },
+              parcelTo: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableInteger' },
+                  {
+                    description: 'Destination location code',
+                  },
+                ],
+              },
+              totalWeight: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Total weight of the parcel',
+                  },
+                ],
+              },
+              totalVolume: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Total volume of the parcel',
+                  },
+                ],
+              },
+              totalNumberOfParcels: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableInteger' },
+                  {
+                    description: 'Total number of parcels',
+                  },
+                ],
+              },
+              packingListNumber: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Packing list number',
+                  },
+                ],
+              },
+            },
           },
-          purchaseOrderNumber: {
-            type: 'string',
-            description: 'Purchase order number',
-            nullable: true,
-          },
-          parcelFrom: {
-            type: 'integer',
-            description: 'Source location code',
-            nullable: true,
-          },
-          parcelTo: {
-            type: 'integer',
-            description: 'Destination location code',
-            nullable: true,
-          },
-          totalWeight: {
-            type: 'string',
-            description: 'Total weight of the parcel',
-            nullable: true,
-          },
-          totalVolume: {
-            type: 'string',
-            description: 'Total volume of the parcel',
-            nullable: true,
-          },
-          totalNumberOfParcels: {
-            type: 'integer',
-            description: 'Total number of parcels',
-            nullable: true,
-          },
-          packingListNumber: {
-            type: 'string',
-            description: 'Packing list number',
-            nullable: true,
-          },
-          sourceSystem: {
-            type: 'string',
-            description: 'Source system identifier',
-            nullable: true,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Parcel creation timestamp',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Parcel last update timestamp',
-          },
-        },
+        ],
       },
       ParcelItem: {
-        type: 'object',
-        required: ['id', 'parcelId', 'createdAt', 'updatedAt'],
-        properties: {
-          id: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Parcel item ID',
+        allOf: [
+          { $ref: '#/components/schemas/CommonFields' },
+          {
+            type: 'object',
+            required: ['parcelId'],
+            properties: {
+              productId: {
+                allOf: [
+                  { $ref: '#/components/schemas/UuidField' },
+                  {
+                    description: 'Associated product ID',
+                    nullable: true,
+                  },
+                ],
+              },
+              parcelId: {
+                allOf: [
+                  { $ref: '#/components/schemas/UuidField' },
+                  {
+                    description: 'Associated parcel ID',
+                  },
+                ],
+              },
+              productQuantity: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableInteger' },
+                  {
+                    description: 'Quantity of the product',
+                  },
+                ],
+              },
+              productCode: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Product code',
+                  },
+                ],
+              },
+              expiryDate: {
+                type: 'string',
+                format: 'date-time',
+                description: 'Product expiry date',
+                nullable: true,
+              },
+              batchNumber: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Batch number',
+                  },
+                ],
+              },
+              weight: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Weight of the item',
+                  },
+                ],
+              },
+              volume: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Volume of the item',
+                  },
+                ],
+              },
+              parcelNumber: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Parcel number',
+                  },
+                ],
+              },
+              lineNumber: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableInteger' },
+                  {
+                    description: 'Line number in the parcel',
+                  },
+                ],
+              },
+              externalRef: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'External reference',
+                  },
+                ],
+              },
+              unitOfMeasure: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Unit of measure',
+                  },
+                ],
+              },
+              currencyUnit: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Currency unit',
+                  },
+                ],
+              },
+              unitPrice: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Unit price',
+                  },
+                ],
+              },
+              messageEsc1: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Message field 1',
+                  },
+                ],
+              },
+              messageEsc2: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Message field 2',
+                  },
+                ],
+              },
+              comments: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Comments',
+                  },
+                ],
+              },
+              contains: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Contents description',
+                  },
+                ],
+              },
+            },
           },
-          productId: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Associated product ID',
-            nullable: true,
-          },
-          parcelId: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Associated parcel ID',
-          },
-          productQuantity: {
-            type: 'integer',
-            description: 'Quantity of the product',
-            nullable: true,
-          },
-          productCode: {
-            type: 'string',
-            description: 'Product code',
-            nullable: true,
-          },
-          expiryDate: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Product expiry date',
-            nullable: true,
-          },
-          batchNumber: {
-            type: 'string',
-            description: 'Batch number',
-            nullable: true,
-          },
-          weight: {
-            type: 'string',
-            description: 'Weight of the item',
-            nullable: true,
-          },
-          volume: {
-            type: 'string',
-            description: 'Volume of the item',
-            nullable: true,
-          },
-          parcelNumber: {
-            type: 'string',
-            description: 'Parcel number',
-            nullable: true,
-          },
-          lineNumber: {
-            type: 'integer',
-            description: 'Line number in the parcel',
-            nullable: true,
-          },
-          externalRef: {
-            type: 'string',
-            description: 'External reference',
-            nullable: true,
-          },
-          unitOfMeasure: {
-            type: 'string',
-            description: 'Unit of measure',
-            nullable: true,
-          },
-          currencyUnit: {
-            type: 'string',
-            description: 'Currency unit',
-            nullable: true,
-          },
-          unitPrice: {
-            type: 'string',
-            description: 'Unit price',
-            nullable: true,
-          },
-          messageEsc1: {
-            type: 'string',
-            description: 'Message field 1',
-            nullable: true,
-          },
-          messageEsc2: {
-            type: 'string',
-            description: 'Message field 2',
-            nullable: true,
-          },
-          comments: {
-            type: 'string',
-            description: 'Comments',
-            nullable: true,
-          },
-          contains: {
-            type: 'string',
-            description: 'Contents description',
-            nullable: true,
-          },
-          sourceSystem: {
-            type: 'string',
-            description: 'Source system identifier',
-            nullable: true,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Item creation timestamp',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Item last update timestamp',
-          },
-        },
+        ],
       },
       ParcelItemWithProduct: {
         allOf: [
@@ -441,121 +554,120 @@ const swaggerDefinition = {
                 nullable: true,
               },
               packingListNumber: {
-                type: 'string',
-                description: 'Packing list number from parcel',
-                nullable: true,
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Packing list number from parcel',
+                  },
+                ],
               },
             },
           },
         ],
       },
       Product: {
-        type: 'object',
-        required: ['id', 'createdAt', 'updatedAt'],
-        properties: {
-          id: {
-            type: 'string',
-            format: 'uuid',
-            description: 'Product ID',
-          },
-          unidataId: {
-            type: 'string',
-            description: 'Unidata ID',
-            nullable: true,
-          },
-          productCode: {
-            type: 'string',
-            description: 'Product code',
-            nullable: true,
-          },
-          productDescription: {
-            type: 'string',
-            description: 'Product description',
-            nullable: true,
-          },
-          type: {
-            type: 'string',
-            description: 'Product type',
-            nullable: true,
-          },
-          state: {
-            type: 'string',
-            description: 'Product state',
-            nullable: true,
-          },
-          freeCode: {
-            type: 'string',
-            description: 'Free code',
-            nullable: true,
-          },
-          standardizationLevel: {
-            type: 'string',
-            description: 'Standardization level',
-            nullable: true,
-          },
-          labels: {
+        allOf: [
+          { $ref: '#/components/schemas/CommonFields' },
+          {
             type: 'object',
-            description: 'Product labels',
-            nullable: true,
-          },
-          sourceSystem: {
-            type: 'string',
-            description: 'Source system identifier',
-            nullable: true,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Product creation timestamp',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-            description: 'Product last update timestamp',
-          },
-        },
-      },
-      ParcelItemsResponse: {
-        type: 'object',
-        required: ['success', 'message', 'data'],
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          message: {
-            type: 'string',
-            example: 'Parcel items retrieved successfully',
-          },
-          data: {
-            type: 'object',
-            required: ['items', 'total', 'page', 'limit', 'totalPages'],
             properties: {
-              items: {
-                type: 'array',
-                items: {
-                  $ref: '#/components/schemas/ParcelItemWithProduct',
-                },
+              unidataId: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Unidata ID',
+                  },
+                ],
               },
-              total: {
-                type: 'integer',
-                description: 'Total number of parcel items',
+              productCode: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Product code',
+                  },
+                ],
               },
-              page: {
-                type: 'integer',
-                description: 'Current page number',
+              productDescription: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Product description',
+                  },
+                ],
               },
-              limit: {
-                type: 'integer',
-                description: 'Number of items per page',
+              type: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Product type',
+                  },
+                ],
               },
-              totalPages: {
-                type: 'integer',
-                description: 'Total number of pages',
+              state: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Product state',
+                  },
+                ],
+              },
+              freeCode: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Free code',
+                  },
+                ],
+              },
+              standardizationLevel: {
+                allOf: [
+                  { $ref: '#/components/schemas/NullableString' },
+                  {
+                    description: 'Standardization level',
+                  },
+                ],
+              },
+              labels: {
+                type: 'object',
+                description: 'Product labels',
+                nullable: true,
               },
             },
           },
-        },
+        ],
+      },
+      ParcelItemsResponse: {
+        allOf: [
+          { $ref: '#/components/schemas/BaseResponse' },
+          {
+            type: 'object',
+            required: ['data'],
+            properties: {
+              success: {
+                example: true,
+              },
+              message: {
+                example: 'Parcel items retrieved successfully',
+              },
+              data: {
+                allOf: [
+                  { $ref: '#/components/schemas/PaginatedListResponse' },
+                  {
+                    type: 'object',
+                    properties: {
+                      items: {
+                        type: 'array',
+                        items: {
+                          $ref: '#/components/schemas/ParcelItemWithProduct',
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
       },
     },
     responses: {

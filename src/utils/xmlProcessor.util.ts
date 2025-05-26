@@ -109,76 +109,104 @@ export class XMLProcessor {
    */
   private static processStandardXML(xmlData: any): DbPayload[] {
     const record = xmlData.data.record;
+    const purchaseOrderNumber = this.extractPurchaseOrderNumber(record);
+    const parcelFrom = this.extractPartnerName(record);
+    const moveLines = this.extractMoveLines(record);
 
-    // Extract purchase order number
-    const purchaseOrderNumber =
-      record.field.find((f: any) => f.name === 'origin')?._ ||
-      record.field.find((f: any) => f.name === 'origin') ||
-      null;
-
-    // Extract partner name (parcel from)
-    let parcelFrom = null;
-    const partnerField = record.field.find((f: any) => f.name === 'partner_id');
-    if (partnerField && partnerField.field) {
-      if (Array.isArray(partnerField.field)) {
-        parcelFrom =
-          partnerField.field.find((f: any) => f.name === 'name')?._ ||
-          partnerField.field.find((f: any) => f.name === 'name') ||
-          null;
-      } else {
-        parcelFrom = partnerField.field._ || partnerField.field.name || null;
-      }
-    }
-
-    // Extract move lines
-    const moveLines = record.field.find((f: any) => f.name === 'move_lines');
-    if (!moveLines || !moveLines.record) {
-      return [
-        {
-          parcel: {
-            purchaseOrderNumber,
-            parcelFrom,
-            parcelTo: null,
-          },
-          parcelItems: [],
-        },
-      ];
+    if (!moveLines) {
+      return this.createEmptyPayload(purchaseOrderNumber, parcelFrom);
     }
 
     const moveLineRecord = Array.isArray(moveLines.record) ? moveLines.record : [moveLines.record];
+    return moveLineRecord.map((moveRecord: any) =>
+      this.processMoveRecord(moveRecord, purchaseOrderNumber),
+    );
+  }
 
-    return moveLineRecord.map((moveRecord: any) => {
-      const getFieldValue = (name: string) => {
-        const field = moveRecord.field.find((f: any) => f.name === name);
-        return field ? field._ || field : null;
-      };
+  /**
+   * Extract purchase order number from standard XML record
+   */
+  private static extractPurchaseOrderNumber(record: any): string | null {
+    const originField = record.field.find((f: any) => f.name === 'origin');
+    return originField?._ || originField || null;
+  }
 
-      const parcelFromNum = getFieldValue('parcel_from');
-      const parcelToNum = getFieldValue('parcel_to');
-      const totalNumberOfParcels = getFieldValue('parcel_qty');
-      const weight = getFieldValue('total_weight');
-      const volume = getFieldValue('total_volume');
-      const packingListNumber = getFieldValue('packing_list');
+  /**
+   * Extract partner name from standard XML record
+   */
+  private static extractPartnerName(record: any): string | null {
+    const partnerField = record.field.find((f: any) => f.name === 'partner_id');
+    if (!partnerField?.field) return null;
 
-      const parcel: Parcel = {
-        purchaseOrderNumber,
-        parcelFrom: parcelFromNum,
-        parcelTo: parcelToNum,
-        packingListNumber,
-        totalNumberOfParcels: totalNumberOfParcels ? parseInt(totalNumberOfParcels, 10) : 1,
-        itemType: 'Regular',
-      };
+    if (Array.isArray(partnerField.field)) {
+      const nameField = partnerField.field.find((f: any) => f.name === 'name');
+      return nameField?._ || nameField || null;
+    }
 
-      const parcelItems = this.processStandardXMLItems(
-        moveRecord,
-        weight,
-        volume,
-        parcelFromNum,
-        parcelToNum,
-      );
+    return partnerField.field._ || partnerField.field.name || null;
+  }
 
-      return { parcel, parcelItems };
-    });
+  /**
+   * Extract move lines from standard XML record
+   */
+  private static extractMoveLines(record: any): any | null {
+    const moveLines = record.field.find((f: any) => f.name === 'move_lines');
+    return moveLines?.record ? moveLines : null;
+  }
+
+  /**
+   * Create empty payload when no move lines exist
+   */
+  private static createEmptyPayload(
+    purchaseOrderNumber: string | null,
+    parcelFrom: string | null,
+  ): DbPayload[] {
+    return [
+      {
+        parcel: {
+          purchaseOrderNumber,
+          parcelFrom,
+          parcelTo: null,
+        },
+        parcelItems: [],
+      },
+    ];
+  }
+
+  /**
+   * Process a single move record
+   */
+  private static processMoveRecord(moveRecord: any, purchaseOrderNumber: string | null): DbPayload {
+    const getFieldValue = (name: string) => {
+      const field = moveRecord.field.find((f: any) => f.name === name);
+      return field ? field._ || field : null;
+    };
+
+    const parcelFromNum = getFieldValue('parcel_from');
+    const parcelToNum = getFieldValue('parcel_to');
+    const totalNumberOfParcels = getFieldValue('parcel_qty');
+    const weight = getFieldValue('total_weight');
+    const volume = getFieldValue('total_volume');
+    const packingListNumber = getFieldValue('packing_list');
+
+    const parcel: Parcel = {
+      purchaseOrderNumber,
+      parcelFrom: parcelFromNum,
+      parcelTo: parcelToNum,
+      packingListNumber,
+      totalNumberOfParcels: totalNumberOfParcels ? parseInt(totalNumberOfParcels, 10) : 1,
+      itemType: 'Regular',
+    };
+
+    const parcelItems = this.processStandardXMLItems(
+      moveRecord,
+      weight,
+      volume,
+      parcelFromNum,
+      parcelToNum,
+    );
+
+    return { parcel, parcelItems };
   }
 
   /**
@@ -492,22 +520,30 @@ export class XMLProcessor {
     if (!data) return null;
 
     if (typeof data === 'string') {
-      return data.trim() || null;
+      return this.trimToNull(data);
     }
 
     if (typeof data === 'object') {
-      if (data._ !== undefined) {
-        return typeof data._ === 'string' ? data._.trim() || null : null;
-      }
-
-      if (typeof data === 'object' && data !== null) {
-        const keys = Object.keys(data);
-        if (keys.length === 0 || (keys.length === 1 && keys[0].includes('Type'))) {
-          return null;
-        }
-      }
+      return this.extractFromObject(data);
     }
 
+    return null;
+  }
+
+  /**
+   * Trim string and return null if empty
+   */
+  private static trimToNull(value: string): string | null {
+    return value.trim() || null;
+  }
+
+  /**
+   * Extract string value from object data
+   */
+  private static extractFromObject(data: any): string | null {
+    if (data._ !== undefined) {
+      return typeof data._ === 'string' ? this.trimToNull(data._) : null;
+    }
     return null;
   }
 }

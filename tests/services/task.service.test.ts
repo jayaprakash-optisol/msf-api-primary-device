@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TaskService } from '../../src/services/task.service';
 import { db } from '../../src/config/database.config';
-import { tasks, parcels, parcelItems, products } from '../../src/models';
+import { tasks } from '../../src/models';
 import { TaskStatus } from '../../src/types';
 import { StatusCodes } from 'http-status-codes';
 import { sql } from 'drizzle-orm';
