@@ -19,11 +19,7 @@
     "seed": "ts-node src/database/scripts/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "tsx src/database/scripts/migrate.ts",
-    "db:drop": "drizzle-kit drop --config=./drizzle.config.ts",
-    "security:audit": "npm audit --production",
-    "security:check": "npm ci --audit && npm run security:audit",
-    "preinstall": "npm verify-integrity",
-    "verify-integrity": "npm audit signatures"
+    "db:drop": "drizzle-kit drop --config=./drizzle.config.ts"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

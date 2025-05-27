@@ -6,3 +6,4 @@ export * from './products.schema';
 export * from './parcels.schema';
 export * from './parcelItems.schema';
 export * from './tasks.schema';
+export * from './users.schema';

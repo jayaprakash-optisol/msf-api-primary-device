@@ -6,7 +6,7 @@ WORKDIR /webservice
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci 
 
 # Copy source code
 COPY . .
@@ -19,6 +19,7 @@ RUN mkdir -p logs
 
 # Expose port
 EXPOSE 8000
+
 
 # Start the application
 CMD ["npm", "start"] 

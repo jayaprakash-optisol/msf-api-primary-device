@@ -2,10 +2,11 @@ import { Router } from 'express';
 
 import { AuthController } from '../controllers/auth.controller';
 import { validateGuestLogin } from '../validators';
+import { rateLimiter } from '../middleware';
 
 const router = Router();
 const authController = new AuthController();
 
-router.post('/login', validateGuestLogin, authController.login);
+router.post('/login', rateLimiter(), validateGuestLogin, authController.login);
 
 export default router;
