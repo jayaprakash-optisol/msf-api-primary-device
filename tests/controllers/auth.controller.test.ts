@@ -4,7 +4,7 @@ import { AuthService } from '../../src/services/auth.service';
 import { mockLoginRequest } from '../mocks';
 import { StatusCodes } from 'http-status-codes';
 import { createMockRequest, createMockResponse, createMockNext } from '../utils/test-utils';
-import { UnauthorizedError } from '../../src/utils/error.util';
+import { BadRequestError, UnauthorizedError } from '../../src/utils/error.util';
 
 // Mock the asyncHandler middleware
 vi.mock('../../src/middleware/async.middleware', () => ({
@@ -23,6 +23,7 @@ vi.mock('../../src/middleware/async.middleware', () => ({
 vi.mock('../../src/services/auth.service', () => {
   const authServiceMock = {
     login: vi.fn(),
+    logout: vi.fn(),
   };
 
   return {
@@ -137,6 +138,123 @@ describe('AuthController', () => {
 
       // Call the controller method
       await controller.login(req, res, next);
+
+      // Verify next was called with error
+      expect(next).toHaveBeenCalledWith(error);
+    });
+  });
+
+  describe('logout', () => {
+    it('should logout user successfully', async () => {
+      // Setup mocks
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid_token' },
+        user: { id: '1', username: 'testuser' }
+      });
+      const { res, jsonSpy } = createMockResponse();
+      const next = createMockNext();
+
+      // Mock service response
+      authService.logout.mockResolvedValueOnce({
+        success: true,
+        data: null,
+        message: 'Logout successful',
+      });
+
+      // Call the controller method
+      await controller.logout(req, res, next);
+
+      // Verify service was called
+      expect(authService.logout).toHaveBeenCalledWith('valid_token');
+
+      // Verify response
+      expect(jsonSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          message: 'Logout successful',
+          data: null,
+        }),
+      );
+    });
+
+    it('should throw UnauthorizedError when no token is provided', async () => {
+      // Setup mocks with no authorization header
+      const req = createMockRequest({
+        headers: {},
+        user: { id: '1', username: 'testuser' }
+      });
+      const { res } = createMockResponse();
+      const next = createMockNext();
+
+      // Call the controller method
+      await controller.logout(req, res, next);
+
+      // Verify next was called with error
+      expect(next).toHaveBeenCalledWith(expect.any(UnauthorizedError));
+      expect(next.mock.calls[0][0].message).toBe('No token provided');
+    });
+
+    it('should throw BadRequestError when logout fails', async () => {
+      // Setup mocks
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer invalid_token' },
+        user: { id: '1', username: 'testuser' }
+      });
+      const { res } = createMockResponse();
+      const next = createMockNext();
+
+      // Mock service response
+      authService.logout.mockResolvedValueOnce({
+        success: false,
+        error: 'Failed to logout',
+      });
+
+      // Call the controller method
+      await controller.logout(req, res, next);
+
+      // Verify next was called with error
+      expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
+      expect(next.mock.calls[0][0].message).toBe('Failed to logout');
+    });
+
+    it('should throw default BadRequestError if error is undefined', async () => {
+      // Setup mocks
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer invalid_token' },
+        user: { id: '1', username: 'testuser' }
+      });
+      const { res } = createMockResponse();
+      const next = createMockNext();
+
+      // Mock service response with undefined error
+      authService.logout.mockResolvedValueOnce({
+        success: false,
+        error: undefined,
+      });
+
+      // Call the controller method
+      await controller.logout(req, res, next);
+
+      // Verify next was called with default error message
+      expect(next).toHaveBeenCalledWith(expect.any(BadRequestError));
+      expect(next.mock.calls[0][0].message).toBe('Logout failed');
+    });
+
+    it('should pass unexpected errors to next middleware', async () => {
+      // Setup mocks
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid_token' },
+        user: { id: '1', username: 'testuser' }
+      });
+      const { res } = createMockResponse();
+      const next = createMockNext();
+
+      // Mock service to throw error
+      const error = new Error('Unexpected error');
+      authService.logout.mockRejectedValueOnce(error);
+
+      // Call the controller method
+      await controller.logout(req, res, next);
 
       // Verify next was called with error
       expect(next).toHaveBeenCalledWith(error);

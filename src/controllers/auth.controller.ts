@@ -1,8 +1,8 @@
 import { type Request, type Response } from 'express';
 import { asyncHandler } from '../middleware';
 import { AuthService } from '../services';
-import { type IAuthService } from '../types';
-import { authResponse, sendSuccess, UnauthorizedError } from '../utils';
+import { AuthRequest, type IAuthService } from '../types';
+import { authResponse, BadRequestError, sendSuccess, UnauthorizedError } from '../utils';
 
 export class AuthController {
   private readonly authService: IAuthService;
@@ -24,5 +24,24 @@ export class AuthController {
     }
 
     sendSuccess(res, result.data, authResponse.success.loggedIn);
+  });
+
+  /**
+   * Logout user
+   */
+  logout = asyncHandler(async (req: AuthRequest, res: Response) => {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      throw new UnauthorizedError('No token provided');
+    }
+
+    const result = await this.authService.logout(token);
+
+    if (!result.success) {
+      throw new BadRequestError(result.error ?? authResponse.errors.logoutFailed);
+    }
+
+    sendSuccess(res, result.data, result.message);
   });
 }

@@ -31,7 +31,7 @@ vi.mock('../../src/config/redis.config', () => ({
 
 // Mock the env.config module
 vi.mock('../../src/config/env.config', () => ({
-  default: mockEnv
+  default: mockEnv,
 }));
 
 // Mock the utils module
@@ -86,7 +86,7 @@ describe('JWT Utilities', () => {
       const originalJwtSecret = mockEnv.JWT_SECRET;
 
       // Temporarily modify the mock implementation
-      mockEnv.JWT_SECRET = undefined;
+      mockEnv.JWT_SECRET = undefined as any;
 
       // Assert the function throws error
       expect(() => jwtUtil.generateToken(mockJwtPayload)).toThrow('JWT_SECRET is not defined');
@@ -100,7 +100,7 @@ describe('JWT Utilities', () => {
       const originalJwtExpiresIn = mockEnv.JWT_EXPIRES_IN;
 
       // Temporarily modify the mock implementation
-      mockEnv.JWT_EXPIRES_IN = undefined;
+      mockEnv.JWT_EXPIRES_IN = undefined as any;
 
       // Mock crypto.randomBytes
       vi.mocked(crypto.randomBytes).mockReturnValue({
@@ -200,7 +200,7 @@ describe('JWT Utilities', () => {
       const originalJwtSecret = mockEnv.JWT_SECRET;
 
       // Temporarily modify the mock implementation
-      mockEnv.JWT_SECRET = undefined;
+      mockEnv.JWT_SECRET = undefined as any;
 
       // Assert the function throws error
       await expect(jwtUtil.verifyToken('valid_token')).rejects.toThrow('JWT_SECRET is not defined');

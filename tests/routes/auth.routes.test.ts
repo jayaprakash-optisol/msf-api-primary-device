@@ -23,6 +23,13 @@ vi.mock('../../src/controllers/auth.controller', () => {
           },
         });
       }),
+      logout: vi.fn((req, res) => {
+        return res.status(StatusCodes.OK).json({
+          success: true,
+          message: 'Logout successful',
+          data: null,
+        });
+      }),
     })),
   };
 });
@@ -30,6 +37,20 @@ vi.mock('../../src/controllers/auth.controller', () => {
 // Mock validators
 vi.mock('../../src/validators', () => ({
   validateGuestLogin: (req: any, res: any, next: () => any) => next(),
+}));
+
+// Mock authenticate middleware
+vi.mock('../../src/middleware', () => ({
+  authenticate: (req: any, res: any, next: () => any) => {
+    // Add user to request as if authentication was successful
+    req.user = {
+      id: '00000000-0000-0000-0000-000000000001',
+      username: 'testuser',
+      role: 'Stock Manager',
+    };
+    next();
+  },
+  rateLimiter: () => (req: any, res: any, next: () => any) => next(),
 }));
 
 describe('Auth Routes (Integration)', () => {
@@ -66,6 +87,21 @@ describe('Auth Routes (Integration)', () => {
           }),
           token: expect.any(String),
         }),
+      });
+    });
+  });
+
+  describe('POST /guest/auth/logout', () => {
+    it('should logout guest successfully', async () => {
+      const response = await api
+        .post('/guest/auth/logout')
+        .set('Authorization', 'Bearer mock_token')
+        .expect(StatusCodes.OK);
+
+      expect(response.body).toEqual({
+        success: true,
+        message: 'Logout successful',
+        data: null,
       });
     });
   });
