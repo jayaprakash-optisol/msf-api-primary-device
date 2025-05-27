@@ -11,6 +11,12 @@ export class XMLProcessor {
       const xmlData = await parseStringPromise(fileContent.toString(), {
         explicitArray: false,
         mergeAttrs: true,
+        // Prevent XXE attacks
+        xmlParserOptions: {
+          disableEntityReferences: true,
+          disableExternalEntities: true,
+          resolveEntities: false
+        }
       });
 
       const xmlFormat = this.detectXMLFormat(xmlData);

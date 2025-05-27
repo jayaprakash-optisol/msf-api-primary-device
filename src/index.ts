@@ -8,7 +8,7 @@ import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import morgan from 'morgan';
 
-import { closePool, initDatabaseConnection } from './config/database.config';
+import { closePool, initDatabaseConnection, testConnection } from './config/database.config';
 import env from './config/env.config';
 import { initRedisClient } from './config/redis.config';
 import swaggerSpec from './docs/swagger';
@@ -38,6 +38,7 @@ export async function configureApp(): Promise<void> {
 
   // Initialize database with loaded environment variables
   await initDatabaseConnection();
+  await testConnection();
 
   // Initialize Redis client
   initRedisClient();

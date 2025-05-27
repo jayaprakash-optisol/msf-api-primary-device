@@ -12,7 +12,28 @@ services:
     restart: always
     networks:
       - backend
-
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=msf_poc
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5434:5432'
+    restart: always
+    networks:
+      - backend
+  redis:
+    image: 'redis:alpine'
+    ports:
+      - 6379:6379
+    command: redis-server --requirepass Sn579s@H02jg
+    restart: always
+    networks:
+      - backend
   prometheus:
     image: prom/prometheus
     container_name: prometheus
@@ -44,6 +65,8 @@ services:
 volumes:
   prometheus_data: {}
   grafana_data: {}
+  postgres_data: {}
+  redis_data: {}
 
 networks:
   backend:

@@ -13,7 +13,11 @@ export default {
     password: String(process.env.DB_PASSWORD),
     database: String(process.env.DB_NAME),
     port: parseInt(String(process.env.DB_PORT)),
-    ssl: false,
+    ssl: process.env.DB_SSL_ENABLED
+      ? {
+          rejectUnauthorized: false,
+        }
+      : false,
   },
   verbose: true,
   strict: false,
