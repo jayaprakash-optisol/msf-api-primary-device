@@ -87,7 +87,7 @@ export async function configureApp(): Promise<void> {
   });
 
   // Swagger documentation (no rate limiting)
-  app.use(`/api-docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use(`${env.API_PREFIX}/api-docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   // Serve static files from the correct public directory
   app.use(express.static(path.resolve(__dirname, '../public')));
@@ -124,7 +124,9 @@ async function startServer(): Promise<void> {
 
     server.listen(env.PORT, () => {
       logger.info(`✅ Server is running on port ${env.PORT}`);
-      logger.info(`✅ API Documentation available at http://localhost:${env.PORT}/api-docs`);
+      logger.info(
+        `✅ API Documentation available at http://localhost:${env.PORT}${env.API_PREFIX}/api-docs`,
+      );
     });
 
     // Handle graceful shutdown

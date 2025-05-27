@@ -4,8 +4,10 @@ import { mockGuests } from '../mocks';
 import { StatusCodes } from 'http-status-codes';
 import { UnauthorizedError } from '../../src/utils/error.util';
 
-// Mock implementation
+// Mock implementation - use vi.hoisted to ensure they're available before imports
 const mockVerifyGuestCredentials = vi.fn();
+const mockGenerateToken = vi.hoisted(() => vi.fn().mockReturnValue('mock_token'));
+const mockRevokeToken = vi.hoisted(() => vi.fn());
 
 // Import mocked dependencies
 vi.mock('bcrypt', () => ({
@@ -20,7 +22,8 @@ vi.mock('jsonwebtoken', () => ({
 
 vi.mock('../../src/utils/jwt.util', () => ({
   jwtUtil: {
-    generateToken: vi.fn().mockReturnValue('mock_token'),
+    generateToken: mockGenerateToken,
+    revokeToken: mockRevokeToken,
   },
 }));
 
@@ -30,9 +33,11 @@ vi.mock('../../src/utils/responseMessages/auth.messages', () => ({
     errors: {
       invalidCredentials: 'Authentication failed: Invalid credentials',
       loginFailed: 'Login failed',
+      logoutFailed: 'Logout failed',
     },
     success: {
       loggedIn: 'Guest logged in successfully',
+      loggedOut: 'Logged out successfully',
     },
   },
 }));
@@ -109,6 +114,37 @@ describe('AuthService', () => {
 
       // Just test that some error is thrown
       await expect(authService.login('john.doe1234', 'Password123!')).rejects.toThrow();
+    });
+  });
+
+  describe('logout', () => {
+    it('should logout successfully', async () => {
+      // Mock revokeToken to resolve successfully
+      mockRevokeToken.mockResolvedValueOnce(undefined);
+
+      // Call logout
+      const result = await authService.logout('mock_token');
+
+      // Verify the result
+      expect(result).toHaveProperty('success', true);
+      expect(result).toHaveProperty('message', 'Logged out successfully');
+      expect(result).toHaveProperty('data', null);
+
+      // Verify revokeToken was called with the correct token
+      expect(mockRevokeToken).toHaveBeenCalledWith('mock_token');
+    });
+
+    it('should handle errors during logout', async () => {
+      // Mock revokeToken to throw an error
+      mockRevokeToken.mockRejectedValueOnce(new Error('Test error'));
+
+      // Test that an error is thrown
+      const promise = authService.logout('mock_token');
+      await expect(promise).rejects.toThrow();
+      await expect(promise).rejects.toThrow('Logout failed');
+
+      // Verify revokeToken was called with the correct token
+      expect(mockRevokeToken).toHaveBeenCalledWith('mock_token');
     });
   });
 });

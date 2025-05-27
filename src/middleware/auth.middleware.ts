@@ -4,7 +4,11 @@ import { type AuthRequest } from '../types';
 import { UnauthorizedError, ForbiddenError, jwtUtil } from '../utils';
 
 // Verify JWT token from Authorization header
-export const authenticate = (req: AuthRequest, _res: Response, next: NextFunction): void => {
+export const authenticate = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
 
@@ -12,16 +16,17 @@ export const authenticate = (req: AuthRequest, _res: Response, next: NextFunctio
       throw new UnauthorizedError('No token provided');
     }
 
-    const decoded = jwtUtil.verifyToken(token);
+    const decoded = await jwtUtil.verifyToken(token);
 
-    if (!decoded.success || !decoded.data) {
+    // Check if decoded token has all required fields
+    if (!decoded.guestId || !decoded.username || !decoded.role) {
       throw new UnauthorizedError('Invalid token');
     }
 
     req.user = {
-      id: decoded.data.guestId.toString(),
-      username: decoded.data.username,
-      role: decoded.data.role,
+      id: decoded.guestId.toString(),
+      username: decoded.username,
+      role: decoded.role,
     };
     next();
   } catch {

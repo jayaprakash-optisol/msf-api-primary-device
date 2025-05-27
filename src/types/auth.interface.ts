@@ -21,6 +21,9 @@ export interface AuthRequest extends Request {
 export interface JwtPayload {
   guestId: string;
   username: string;
+  iat?: number;
+  exp?: number;
+  jti?: string;
   role: string;
   [key: string]: unknown;
 }
@@ -36,4 +39,9 @@ export interface IAuthService {
     username: string,
     password: string,
   ): Promise<ServiceResponse<{ user: Omit<Guest, 'password'>; token: string }>>;
+
+  /**
+   * Logout user by invalidating their session
+   */
+  logout(token: string): Promise<ServiceResponse<null>>;
 }

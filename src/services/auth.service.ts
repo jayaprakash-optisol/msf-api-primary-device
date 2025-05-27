@@ -65,4 +65,17 @@ export class AuthService implements IAuthService {
       throw handleServiceError(error, authResponse.errors.loginFailed);
     }
   }
+
+  /**
+   * Logout user by invalidating their session
+   * @param token The JWT token to invalidate
+   */
+  async logout(token: string): Promise<ServiceResponse<null>> {
+    try {
+      await jwtUtil.revokeToken(token);
+      return _ok(null, 'Logged out successfully');
+    } catch (error) {
+      throw handleServiceError(error, authResponse.errors.logoutFailed);
+    }
+  }
 }
